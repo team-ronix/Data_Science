@@ -7,6 +7,8 @@ import numpy as np
 
 
 
+
+
 class DataValidation:
     def __init__(self, data: pd.DataFrame):
         self._setup_logging()
@@ -82,9 +84,41 @@ class DataValidation:
                 )
             )
         
+    
+    # ── DIMENSION 2: COMPLETENESS ─────────────────────────────────────────
+    def check_completeness(self):
+        for col in self.data.columns:
+            self.suite.add_expectation(
+                gx.expectations.ExpectColumnValuesToNotBeNull(column=col)
+            )
+    # ── DIMENSION 3: UNIQUENESS ───────────────────────────────────────────
+    def check_uniqueness(self):
+        self.suite.add_expectation(
+            gx.expectations.ExpectColumnValuesToBeUnique(column="id")
+        )
+    
+        
+    def check_categorical(self):
+            self.logger.info("Checking categorical columns...")
+            for col in self.data.columns:
+                if self.data[col].dtype == "object":
+                    unique_values = self.data[col].unique().tolist()
+                    self.suite.add_expectation(
+                        gx.expectations.ExpectColumnValuesToBeInSet(column=col, value_set=unique_values)
+                    )
+    
+
     def run_all_validations(self):
-        self.validate_outliers()
+        # self.validate_outliers()
+        self.check_completeness()
+        self.check_uniqueness()
+        # self.check_categorical()
         results = self.validation_def.run(batch_parameters={"dataframe": self.data})
+        validator = Validator(
+        execution_engine=PandasExecutionEngine(),
+        expectation_suite=self.suite
+        )
+
         self._print_report(results)
         self.context.build_data_docs()
         self.context.open_data_docs()
@@ -117,7 +151,6 @@ class DataValidation:
         print("\n" + "=" * 58)
 
 
-            
 
 if __name__ == "__main__":
     df = pd.read_csv("data/merged_df.csv")
