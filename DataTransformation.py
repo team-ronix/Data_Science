@@ -5,11 +5,15 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from sklearn.model_selection import train_test_split
 
 
 BASE_DIR = Path(__file__).resolve().parent
 INPUT_PATH = BASE_DIR / "data" / "merged_df_cleaned.csv"
 OUTPUT_PATH = BASE_DIR / "data" / "merged_df_transformed.csv"
+TRAIN_OUTPUT_PATH = BASE_DIR / "data" / "train.csv"
+TRAIN_NORM_OUTPUT_PATH = BASE_DIR / "data" / "train_norm.csv"
+TEST_OUTPUT_PATH = BASE_DIR / "data" / "test.csv"
 LOG_PATH = BASE_DIR / "logs/DataTransformationPipeline.log"
 
 GOOD_STATUS = [
@@ -29,6 +33,29 @@ DROP_COLS = [
     "fico_range_high",
     "issue_d",
     "earliest_cr_line",
+]
+
+MINMAX_COLS = [
+    "loan_amnt",
+    "funded_amnt",
+    "int_rate",
+    "installment",
+    "annual_inc",
+    "dti",
+    "delinq_2yrs",
+    "inq_last_6mths",
+    "mths_since_last_delinq",
+    "open_acc",
+    "pub_rec",
+    "revol_bal",
+    "revol_util",
+    "total_acc",
+    "avg_cur_bal",
+    "acc_now_delinq",
+    "CPI",
+    "Unemployment Rate",
+    "Federal Funds Rate",
+    "fico",
 ]
 
 
@@ -124,6 +151,27 @@ def transform_data(logger: logging.Logger) -> pd.DataFrame:
     return data
 
 
+def normalize_train_test(
+    train: pd.DataFrame,
+    test: pd.DataFrame,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    feature_cols = [
+        column for column in MINMAX_COLS if column in train.columns and column != "loan_status"
+    ]
+
+    train = train.copy()
+    test = test.copy()
+
+    train_min = train[feature_cols].min()
+    train_max = train[feature_cols].max()
+    train_range = (train_max - train_min).replace(0, 1)
+
+    train[feature_cols] = (train[feature_cols] - train_min) / train_range
+    test[feature_cols] = (test[feature_cols] - train_min) / train_range
+
+    return train, test
+
+
 def main() -> pd.DataFrame:
     logger = setup_logging()
     logger.info("Starting data transformation pipeline")
@@ -131,6 +179,25 @@ def main() -> pd.DataFrame:
     logger.info("Saving transformed data to %s", OUTPUT_PATH)
     merged_df_transformed.to_csv(OUTPUT_PATH, index=False)
     logger.info("Saved transformed data with shape %s", merged_df_transformed.shape)
+
+    logger.info("Splitting transformed data into train/test sets")
+    train, test = train_test_split(
+        merged_df_transformed,
+        test_size=0.2,
+        random_state=42,
+        stratify=merged_df_transformed["loan_status"],
+    )
+
+    logger.info("Applying min-max normalization using train data only")
+    train.to_csv(TRAIN_OUTPUT_PATH)
+    train, test = normalize_train_test(train, test)
+
+    logger.info("Saving normalized train data to %s", TRAIN_OUTPUT_PATH)
+    train.to_csv(TRAIN_NORM_OUTPUT_PATH, index=False)
+    logger.info("Saving normalized test data to %s", TEST_OUTPUT_PATH)
+    test.to_csv(TEST_OUTPUT_PATH, index=False)
+
+    logger.info("Saved train/test splits with shapes train=%s test=%s", train.shape, test.shape)
     return merged_df_transformed
 
 
