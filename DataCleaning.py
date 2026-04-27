@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Iterable
 
 import pandas as pd
+import os
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -56,11 +57,12 @@ class DataCleaningPipeline:
         self.logger.info(f"Output path : {self.output_path}")
 
     def _setup_logging(self) -> None:
+        os.makedirs("logs", exist_ok=True)
         logging.basicConfig(
             level=logging.INFO,
             format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
             handlers=[
-                logging.FileHandler("DataCleaningPipeline.log"),
+                logging.FileHandler("logs/DataCleaningPipeline.log"),
                 logging.StreamHandler(),
             ],
         )

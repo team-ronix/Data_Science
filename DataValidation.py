@@ -1,4 +1,5 @@
 import logging
+import os
 from typing import Any, Dict
 import pandas as pd
 import great_expectations as gx
@@ -52,11 +53,12 @@ class DataValidation:
         )
 
     def _setup_logging(self) -> None:
+        os.makedirs("logs", exist_ok=True)
         logging.basicConfig(
             level=logging.INFO,
             format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
             handlers=[
-                logging.FileHandler("DataValidationPipeline.log"),
+                logging.FileHandler("logs/DataValidationPipeline.log"),
                 logging.StreamHandler(),
             ],
         )

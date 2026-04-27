@@ -3,3 +3,6 @@ data/
 *.log
 *.pdf
 __pycache__/*
+*.zip
+*.docx
+*.html

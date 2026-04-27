@@ -34,11 +34,12 @@ class DataCollectionPipeline:
         self.logger.info("HTTP session initialized successfully with custom headers.")
 
     def _setup_logging(self):
+        os.makedirs("logs", exist_ok=True)
         logging.basicConfig(
             level=logging.INFO,
             format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
             handlers=[
-                logging.FileHandler("DataCollectionPipeline.log"),
+                logging.FileHandler("logs/DataCollectionPipeline.log"),
                 logging.StreamHandler(),
             ],
         )
