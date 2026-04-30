@@ -1,0 +1,22 @@
+columns have data leakage:
+
+total_pymnt → total amount paid so far
+recoveries → money recovered after default
+If total_pymnt is high → likely fully paid
+If recoveries > 0 → already defaulted
+
+issue_d
+Encodes time → can leak macroeconomic conditions
+Model may “cheat” by learning time patterns instead of risk
+
+-----------------------------------------------------------------------------------------------------------------------
+
+Banks are most negatively impacted by loans predicted as fully paid (class 0) when they actually default (class 1).
+These cases are false negatives (FN), and they represent direct financial losses. From a business perspective, 
+FN errors are the most critical, so the model should aim to minimize FN by increasing recall for the default class.
+
+However, banks are also affected by loans predicted as charged off (class 1) when they are actually fully paid (class 0).
+These are false positives (FP), which lead to rejecting good borrowers and therefore losing potential profit.
+
+In summary, the model should balance both types of errors, with greater emphasis on reducing FN. Therefore, 
+we fine-tune the model using the F2-score, which prioritizes recall over precision while still accounting for FP.

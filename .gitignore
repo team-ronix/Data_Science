@@ -8,3 +8,7 @@ __pycache__/*
 *.html
 *.ipynb
 tests/__pycache__/*
+eda_outputs/
+model_outputs/
+mlruns/
+mlflow.db

@@ -81,6 +81,19 @@ def log_step(logger: logging.Logger, step_name: str, dataframe: pd.DataFrame) ->
         int(dataframe.isna().sum().sum()),
     )
 
+def save_business_statistics(logger: logging.Logger, data: pd.DataFrame) -> None:
+    accepted_loans = data[data["loan_status"] == 0]
+    rejected_loans = data[data["loan_status"] == 1]
+    # Use only accepted loans to calculate average profit as total_pymnt > loan_amnt
+    avg_loan_profit = accepted_loans["total_pymnt"].mean() - accepted_loans["loan_amnt"].mean()
+    avg_loan_loss = rejected_loans["loan_amnt"].mean() - rejected_loans["total_pymnt"].mean()
+    avg_loan_amount = data["loan_amnt"].mean()
+    statistics = pd.DataFrame({
+        "avg_loan_profit": [avg_loan_profit],
+        "avg_loan_loss": [avg_loan_loss],
+        "avg_loan_amount": [avg_loan_amount]
+    })
+    statistics.to_csv(BASE_DIR / "data" / "business_statistics.csv", index=False)
 
 def load_input_data(path: Path = INPUT_PATH) -> pd.DataFrame:
     return pd.read_csv(path)
@@ -91,7 +104,7 @@ def filter_loan_status(data: pd.DataFrame) -> pd.DataFrame:
     data = data[data["loan_status"] != "Current"].copy()
     data = data[data["loan_status"] != "Default"].copy()
     data["loan_status"] = data["loan_status"].apply(
-        lambda value: 1 if value in GOOD_STATUS else 0
+        lambda value: 0 if value in GOOD_STATUS else 1
     )
     return data
 
@@ -172,6 +185,9 @@ def transform_data(logger: logging.Logger) -> pd.DataFrame:
     logger.info("Filtering loan_status values")
     data = filter_loan_status(data)
     log_step(logger, "Filter and encode loan_status", data)
+    
+    logger.info("Saving business statistics before transformation and dropping unused columns")
+    save_business_statistics(logger, data)
 
     logger.info("Creating fico average and dropping unused columns")
     data = create_fico_feature(data)
@@ -235,7 +251,7 @@ def normalize_train_test(
 
 def split_transformed_data(
     merged_df_transformed: pd.DataFrame,
-    test_size: float = 0.2,
+    test_size: float = 0.1,
     random_state: int = 42,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     train, test = train_test_split(
