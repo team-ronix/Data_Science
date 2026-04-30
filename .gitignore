@@ -7,3 +7,7 @@ __pycache__/*
 *.docx
 *.html
 *.ipynb
+eda_outputs/
+model_outputs/
+mlruns/
+mlflow.db

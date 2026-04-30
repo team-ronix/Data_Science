@@ -1,43 +1,38 @@
-## 1. Add dependency
+# Data Science Project
 
-```bash
-poetry add <dependency>
-```
+This repository contains data collection, cleaning, validation, and exploratory analysis for Lending Club loan data enriched with macroeconomic indicators.
 
- it:
-* updates `pyproject.toml`
-* updates `poetry.lock`
-* installs the package
+## Setup
 
-
----
-
-## 3. `poetry install`
+Install dependencies with Poetry:
 
 ```bash
 poetry install
 ```
 
-* Installs dependencies from `poetry.lock`
-* Creates virtual environment if needed
-* Installs your project (unless disabled)
-
-Used when:
-
-* you clone a repo
-* or recreate environment
-
----
-
-## The summary steps
+## Run Pipelines
 
 ```bash
-# Add dependency (also installs + updates lock)
-poetry add <dependency>
-
-# Reinstall environment from lock file
-poetry install
-
-# Run commands without activating
-poetry run python script.py
+poetry run python DataCollection.py
+poetry run python DataCleaning.py
+poetry run python DataValidation.py
+poetry run python EDA.py
 ```
+
+## EDA Deliverables
+
+Running `EDA.py` produces:
+
+- At least five major visualizations with interpretation-ready summaries
+- Feature-to-target analysis outputs
+- Baseline model comparison metrics
+- A dashboard combining EDA findings, model comparisons, and business insights
+
+Generated artifacts are saved in:
+
+- `eda_outputs/plots/`
+- `eda_outputs/feature_target_numeric_correlations.csv`
+- `eda_outputs/feature_target_categorical_summary.csv`
+- `eda_outputs/model_comparison_metrics.csv`
+- `eda_outputs/eda_interpretations.txt`
+- `eda_outputs/dashboard/eda_dashboard.html`
