@@ -1,5 +1,5 @@
 [project]
-name = "data-science-project"
+name = "Data_Science"
 version = "0.1.0"
 description = ""
 authors = [
@@ -21,7 +21,9 @@ dependencies = [
     "plotly (>=6.7.0,<7.0.0)",
     "imblearn (>=0.0,<0.1)",
     "mlflow (>=3.11.1,<4.0.0)",
-    "streamlit (>=1.45.0,<2.0.0)"
+    "streamlit (>=1.45.0,<2.0.0)",
+    "holoviews (>=1.22.1,<2.0.0)",
+    "hvplot (>=0.12.2,<0.13.0)"
 ]
 
 
