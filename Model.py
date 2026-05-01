@@ -206,29 +206,29 @@ class Model:
         best._cv_best_params = tuner.best_params_
         return best
 
-    def _evaluate(self, name: str, model, X_test, y_test) -> dict:
+    def _evaluate(self, name: str, model, X, y, stage: str = "test") -> dict:
         self.logger.info(f"Evaluating {name}")
-        y_pred = model.predict(X_test)
+        y_pred = model.predict(X)
         roc_auc = None
         if name == "LinearSVC":
-            y_score = model.decision_function(X_test)
+            y_score = model.decision_function(X)
             y_prob = 1 / (1 + np.exp(-y_score))
-            roc_auc = roc_auc_score(y_test, y_prob)
+            roc_auc = roc_auc_score(y, y_prob)
         else:   
-            y_prob = model.predict_proba(X_test)[:, 1]
-            roc_auc = roc_auc_score(y_test, y_prob)
+            y_prob = model.predict_proba(X)[:, 1]
+            roc_auc = roc_auc_score(y, y_prob)
 
-        acc = accuracy_score(y_test, y_pred)
-        precision = precision_score(y_test, y_pred, zero_division=0)
-        recall = recall_score(y_test, y_pred, zero_division=0)
-        f2s = fbeta_score(y_test, y_pred, beta=2, zero_division=0)  # F2 score
-        report = classification_report(y_test, y_pred, zero_division=0)
-        cm = confusion_matrix(y_test, y_pred)
+        acc = accuracy_score(y, y_pred)
+        precision = precision_score(y, y_pred, zero_division=0)
+        recall = recall_score(y, y_pred, zero_division=0)
+        f2s = fbeta_score(y, y_pred, beta=2, zero_division=0)  # F2 score
+        report = classification_report(y, y_pred, zero_division=0)
+        cm = confusion_matrix(y, y_pred)
         
         logged_roc_auc = 'N/A'
         if roc_auc is not None:
             logged_roc_auc = f"{roc_auc:.4f}"
-        self.logger.info(f"{name} - Accuracy: {acc:.4f} | ROC-AUC: {logged_roc_auc}")
+        self.logger.info(f"{name}/{stage} - Accuracy: {acc:.4f} | ROC-AUC: {logged_roc_auc}")
         self.logger.info(f"\n{report}")
 
         fig, ax = plt.subplots(figsize=(6, 5))
@@ -236,10 +236,10 @@ class Model:
             ax=ax, colorbar=True, cmap="Blues"
         )
         ax.set_title(f"{name} - Confusion Matrix")
-        self._save_matplotlib_plot(f"{name.replace(' ', '_')}_confusion_matrix.png")
+        self._save_matplotlib_plot(f"{name.replace(' ', '_')}_{stage}_confusion_matrix.png")
 
         # ===== MLflow Logging =====
-        with mlflow.start_run(run_name=name):
+        with mlflow.start_run(run_name=f"{name} ({stage})"):
             # Log model name
             mlflow.set_tag("model_name", name)
             
@@ -249,37 +249,37 @@ class Model:
                 mlflow.log_param(param_name, param_value)
             
             # Log standard metrics
-            mlflow.log_metric("accuracy", acc)
-            mlflow.log_metric("precision", precision)
-            mlflow.log_metric("recall", recall)
-            mlflow.log_metric("f2_score", f2s)
+            mlflow.log_metric(f"accuracy_{stage}", acc)
+            mlflow.log_metric(f"precision_{stage}", precision)
+            mlflow.log_metric(f"recall_{stage}", recall)
+            mlflow.log_metric(f"f2_score_{stage}", f2s)
             if roc_auc is not None:
-                mlflow.log_metric("roc_auc", roc_auc)
+                mlflow.log_metric(f"roc_auc_{stage}", roc_auc)
             
             # Log business metrics
             business_metrics = self._compute_business_metrics(cm)
-            mlflow.log_metric("false_positive_rate", business_metrics["false_positive_rate"])
-            mlflow.log_metric("true_positive_rate", business_metrics["true_positive_rate"])
-            mlflow.log_metric("avg_missed_profit", business_metrics["avg_missed_profit"])
-            mlflow.log_metric("avg_gained_profit", business_metrics["avg_gained_profit"])
-            mlflow.log_metric("avg_lost_loans_amount", business_metrics["avg_lost_loans_amount"])
-            mlflow.log_metric("avg_saved_loans_amnts", business_metrics["avg_saved_loans_amnts"])
+            mlflow.log_metric(f"false_positive_rate_{stage}", business_metrics["false_positive_rate"])
+            mlflow.log_metric(f"true_positive_rate_{stage}", business_metrics["true_positive_rate"])
+            mlflow.log_metric(f"avg_missed_profit_{stage}", business_metrics["avg_missed_profit"])
+            mlflow.log_metric(f"avg_gained_profit_{stage}", business_metrics["avg_gained_profit"])
+            mlflow.log_metric(f"avg_lost_loans_amount_{stage}", business_metrics["avg_lost_loans_amount"])
+            mlflow.log_metric(f"avg_saved_loans_amnts_{stage}", business_metrics["avg_saved_loans_amnts"])
 
             # Log confusion matrix values
             tn, fp, fn, tp = cm.ravel()
-            mlflow.log_metric("true_negatives", int(tn))
-            mlflow.log_metric("false_positives", int(fp))
-            mlflow.log_metric("false_negatives", int(fn))
-            mlflow.log_metric("true_positives", int(tp))
+            mlflow.log_metric(f"true_negatives_{stage}", int(tn))
+            mlflow.log_metric(f"false_positives_{stage}", int(fp))
+            mlflow.log_metric(f"false_negatives_{stage}", int(fn))
+            mlflow.log_metric(f"true_positives_{stage}", int(tp))
             
             # Log classification report as artifact
-            report_file = self.output_dir / f"{name.replace(' ', '_')}_classification_report.txt"
+            report_file = self.output_dir / f"{name.replace(' ', '_')}_{stage}_classification_report.txt"
             with open(report_file, 'w') as f:
                 f.write(report)
             mlflow.log_artifact(str(report_file))
             
             # Log confusion matrix plot
-            cm_plot_file = self.plots_dir / f"{name.replace(' ', '_')}_confusion_matrix.png"
+            cm_plot_file = self.plots_dir / f"{name.replace(' ', '_')}_{stage}_confusion_matrix.png"
             if cm_plot_file.exists():
                 mlflow.log_artifact(str(cm_plot_file))
             
@@ -295,32 +295,34 @@ class Model:
                     mlflow.log_artifact(str(model_file))
 
         return {
-            "name": name, "model": model,
+            "name": name, "model": model, "stage": stage,
             "acc": acc, "precision": precision, "recall": recall, "f2": f2s,
             "roc_auc": roc_auc, "y_prob": y_prob, "report": report, "cm": cm,
         }
 
-    def _plot_roc_curves(self, results: list, y_test) -> None:
+    def _plot_roc_curves(self, results: list, y, stage: str = "test") -> None:
+        filtered_results = [r for r in results if r["stage"] == stage]
         plt.figure(figsize=(10, 8))
-        for r in results:
+        for r in filtered_results:
             y_prob = r["y_prob"]
-            fpr, tpr, _ = roc_curve(y_test, y_prob)
+            fpr, tpr, _ = roc_curve(y, y_prob)
             roc_auc = auc(fpr, tpr)
-            plt.plot(fpr, tpr, lw=1.8, alpha=0.8, label=f"{r['name']} (AUC={roc_auc:.3f})")
+            plt.plot(fpr, tpr, lw=1.8, alpha=0.8, label=f"{r['name']} {r['stage']} (AUC={roc_auc:.3f})")
 
         plt.plot([0, 1], [0, 1], "k--", lw=1, label="Random")
         plt.xlabel("False Positive Rate")
         plt.ylabel("True Positive Rate")
-        plt.title("ROC Curves - Binary Classification (All Models)")
+        plt.title(f"ROC Curves - Binary Classification (All Models) ({stage})")
         plt.legend(loc="lower right", fontsize=8)
-        self._save_matplotlib_plot("roc_curves_comparison.png")
+        self._save_matplotlib_plot(f"roc_curves_comparison_{stage}.png")
         self.logger.info("ROC curves (binary) saved.")
 
-    def _plot_summary_bar(self, results: list) -> None:
-        names = [r["name"] for r in results]
-        accs = [r["acc"] for r in results]
-        aucs = [r["roc_auc"] if r["roc_auc"] is not None else 0.0 for r in results]
-        f2s = [r["f2"] for r in results]
+    def _plot_summary_bar(self, results: list, stage: str = "test") -> None:
+        filtered_results = [r for r in results if r["stage"] == stage]
+        names = [r["name"] for r in filtered_results]
+        accs = [r["acc"] for r in filtered_results]
+        aucs = [r["roc_auc"] if r["roc_auc"] is not None else 0.0 for r in filtered_results]
+        f2s = [r["f2"] for r in filtered_results]
         x, w = np.arange(len(names)), 0.25
 
         fig, ax = plt.subplots(figsize=(9, 5))
@@ -331,28 +333,21 @@ class Model:
         ax.set_xticklabels(names)
         ax.set_ylim(0, 1.05)
         ax.set_ylabel("Score")
-        ax.set_title("Model Comparison - Accuracy vs ROC-AUC")
+        ax.set_title(f"Model Comparison - Accuracy vs ROC-AUC ({stage})")
         ax.legend()
-        self._save_matplotlib_plot("model_comparison.png")
+        self._save_matplotlib_plot(f"model_comparison_{stage}.png")
         self.logger.info("Model comparison bar chart saved.")
 
-    def _save_results_csv(self, results: list) -> None:
-        rows = [{
-            "Model": r["name"], "Accuracy": r["acc"], "ROC-AUC": r["roc_auc"],
-            "Precision": r["precision"], "Recall": r["recall"], "F2-Score": r["f2"]
-        } for r in results]
-        pd.DataFrame(rows).to_csv(self.output_dir / "model_scores.csv", index=False)
-        self.logger.info(f"Scores saved to {self.output_dir}/model_scores.csv")
-
-    def _models_vs_baseline(self, results: list) -> None:
-        baseline = next((r for r in results if r["name"] == "ZeroR Baseline"), None)
+    def _models_vs_baseline(self, results: list, stage: str = "test") -> None:
+        filtered_results = [r for r in results if r["stage"] == stage]
+        baseline = next((r for r in filtered_results if r["name"] == "ZeroR Baseline"), None)
         if baseline is None:
             self.logger.warning("No baseline model found; skipping baseline context.")
             return
 
-        self.logger.info(f"Models vs {baseline['name']}:")
+        self.logger.info(f"Models vs {baseline['name']} ({stage}):")
         rows = []
-        for r in results:
+        for r in filtered_results:
             if r["name"] == baseline["name"]:
                 continue
             d_auc = (
@@ -361,7 +356,7 @@ class Model:
                 else float("nan")
             )
             self.logger.info(
-                f"{r['name']}: "
+                f"{r['name']} ({stage}): "
                 f"dAcc={r['acc'] - baseline['acc']:+.4f}, "
                 f"dROC-AUC={d_auc:+.4f}, "
                 f"dF2={r['f2'] - baseline['f2']:+.4f}"
@@ -372,10 +367,17 @@ class Model:
                 "Delta ROC-AUC": d_auc,
                 "Delta F2-Score": r["f2"] - baseline["f2"],
             })
-        pd.DataFrame(rows).to_csv(self.output_dir / "models_vs_baseline.csv", index=False)
-        self.logger.info(f"Models vs baseline saved to {self.output_dir}/models_vs_baseline.csv")
+        pd.DataFrame(rows).to_csv(self.output_dir / f"models_vs_baseline_{stage}.csv", index=False)
+        self.logger.info(f"Models vs baseline saved to {self.output_dir}/models_vs_baseline_{stage}.csv")
 
-    
+    def _save_results_csv(self, results: list) -> None:
+        rows = [{
+            "Model": r["name"], "Stage": r["stage"], "Accuracy": r["acc"], "ROC-AUC": r["roc_auc"],
+            "Precision": r["precision"], "Recall": r["recall"], "F2-Score": r["f2"]
+        } for r in results]
+        pd.DataFrame(rows).to_csv(self.output_dir / "model_scores.csv", index=False)
+        self.logger.info(f"Scores saved to {self.output_dir}/model_scores.csv")
+ 
     def run(self) -> list:
         X_train_selected, X_test_selected = self._select_features(n_features=30)
         models = {
@@ -421,14 +423,21 @@ class Model:
 
         results = []
         for name, model in tuned_models.items():
-            r = self._evaluate(name, model, X_test_selected, self.y_test)
+            r = self._evaluate(name, model, X_train_selected, self.y_train, stage="train")
+            results.append(r)
+            r = self._evaluate(name, model, X_test_selected, self.y_test, stage="test")
             results.append(r)
 
-        self._plot_roc_curves(results, self.y_test)
-        self._plot_summary_bar(results)
-        self._save_results_csv(results)
-        self._models_vs_baseline(results)
+        self._plot_roc_curves(results, self.y_train, stage="train")
+        self._plot_roc_curves(results, self.y_test, stage="test")
+        
+        self._plot_summary_bar(results, stage="train")
+        self._plot_summary_bar(results, stage="test")
+        
+        self._models_vs_baseline(results, stage="train")
+        self._models_vs_baseline(results, stage="test")
 
+        self._save_results_csv(results)
         return results
 
 
