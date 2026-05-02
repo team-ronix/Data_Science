@@ -76,7 +76,8 @@ class DataCollectionPipeline:
             records = []
             for item in observations:
                 date_str = item.get("date")
-                if date_str is None:    continue
+                if date_str is None:
+                    continue
                 date = datetime.strptime(date_str, "%Y-%m-%d")
                 record = {
                     "Year": date.year,
