@@ -284,4 +284,3 @@ merged_df_transformed: pd.DataFrame | None = None
 
 if __name__ == "__main__":
     merged_df_transformed = main()
-    print(merged_df_transformed.head())
