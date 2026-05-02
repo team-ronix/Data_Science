@@ -8,12 +8,11 @@ import matplotlib.pyplot as plt
 import pickle
 import mlflow
 import mlflow.sklearn
-import mlflow.xgboost
 
 from sklearn.feature_selection import SelectKBest, f_classif
 from sklearn.dummy import DummyClassifier
 from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import AdaBoostClassifier, BaggingClassifier
+from sklearn.ensemble import AdaBoostClassifier, RandomForestClassifier
 from sklearn.svm import LinearSVC
 from sklearn.tree import DecisionTreeClassifier
 from xgboost import XGBClassifier
@@ -173,12 +172,10 @@ class Model:
                     scale_pos_weight * 1.5,
                 ],
             },
-            "Bagging": {
+            "Random Forest": {
                 "n_estimators": [100, 200, 300],
                 "max_samples": [0.6, 0.8, 1.0],
                 "max_features": [0.6, 0.8, 1.0],
-                "bootstrap": [True],
-                "bootstrap_features": [False, True],
             }
         }
 
@@ -391,30 +388,27 @@ class Model:
                 class_weight="balanced",
                 random_state=42,
             ),
-            # "AdaBoost": AdaBoostClassifier(
-            #     estimator=DecisionTreeClassifier(
-            #         max_depth=2, min_samples_leaf=10, random_state=42, class_weight="balanced"
-            #     ),
-            #     n_estimators=300, learning_rate=0.5, random_state=42
-            # ),
-            # "XGBoost": XGBClassifier(
-            #     n_estimators=300,
-            #     max_depth=6,
-            #     learning_rate=0.05,
-            #     subsample=0.8,
-            #     colsample_bytree=0.8,
-            #     random_state=42,
-            #     eval_metric="logloss",
-            # ),
-            # "Bagging": BaggingClassifier(
-            #     estimator=DecisionTreeClassifier(random_state=42, class_weight="balanced"),
-            #     n_estimators=200,
-            #     max_samples=0.8,
-            #     max_features=0.8,
-            #     bootstrap=True,
-            #     random_state=42,
-            #     n_jobs=-1,
-            # ),
+            "AdaBoost": AdaBoostClassifier(
+                estimator=DecisionTreeClassifier(
+                    max_depth=2, min_samples_leaf=10, random_state=42, class_weight="balanced"
+                ),
+                n_estimators=300, learning_rate=0.5, random_state=42
+            ),
+            "XGBoost": XGBClassifier(
+                n_estimators=300,
+                max_depth=6,
+                learning_rate=0.05,
+                subsample=0.8,
+                colsample_bytree=0.8,
+                random_state=42,
+                eval_metric="logloss",
+            ),
+            "Random Forest": RandomForestClassifier(
+                n_estimators=200,
+                class_weight="balanced_subsample",
+                random_state=42,
+                bootstrap=True,
+            ),
         }
 
         tuned_models = {}
