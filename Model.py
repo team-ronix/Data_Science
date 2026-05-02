@@ -448,6 +448,6 @@ if __name__ == "__main__":
         y_test=test["loan_status"],
         business_statistics=business_statistics,
         output_dir="model_outputs",
-        random_search_iter=1,
+        random_search_iter=5,
     )
     results = model_dev.run()

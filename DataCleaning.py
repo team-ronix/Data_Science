@@ -56,7 +56,7 @@ class DataCleaningPipeline:
             level=logging.INFO,
             format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
             handlers=[
-                logging.FileHandler("./log/DataCleaningPipeline.log"),
+                logging.FileHandler("./logs/DataCleaningPipeline.log"),
                 logging.StreamHandler(),
             ],
         )
