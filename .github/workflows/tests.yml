@@ -31,3 +31,6 @@ jobs:
 
       - name: Lint code
         run: poetry run ruff check .
+
+      - name: Static type checking
+        run: poetry run mypy .

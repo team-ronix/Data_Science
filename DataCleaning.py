@@ -151,7 +151,7 @@ def strip_and_standardize_strings(df: pd.DataFrame) -> pd.DataFrame:
             .str.strip()
             .str.replace(r"\s+", " ", regex=True)
         )
-        df[col] = series.where(~series.isin(_NULL_SENTINELS), pd.NA)
+        df[col] = series.where(~series.isin(_NULL_SENTINELS), pd.NA)  # type: ignore[call-overload]
     return df
 
 

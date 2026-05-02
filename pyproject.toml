@@ -12,14 +12,25 @@ dependencies = [
     "python-dotenv (>=1.2.2,<2.0.0)",
     "scipy (>=1.17.1,<2.0.0)",
     "great-expectations (>=1.17.0,<2.0.0)",
-    "pytest (>=9.0.3,<10.0.0)",
     "scikit-learn (>=1.8.0,<2.0.0)",
     "numpy (>=2.4.4,<3.0.0)",
-    "flake8 (>=7.3.0,<8.0.0)",
-    "ruff (>=0.15.12,<0.16.0)"
 ]
 
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+[dependency-groups]
+dev = [
+    "types-requests (>=2.33.0.20260408,<3.0.0.0)",
+    "pandas-stubs (>=3.0.0.260204,<4.0.0.0)",
+    "types-urllib3 (>=1.26.25.14,<2.0.0.0)",
+    "mypy (>=1.20.2,<2.0.0)",
+    "scipy-stubs (>=1.17.1.4,<2.0.0.0)",
+    "pytest (>=9.0.3,<10.0.0)",
+    "ruff (>=0.15.12,<0.16.0)",
+]
+
+[tool.mypy]
+ignore_missing_imports = true
