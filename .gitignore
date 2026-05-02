@@ -7,3 +7,4 @@ __pycache__/*
 *.docx
 *.html
 *.ipynb
+tests/__pycache__/*

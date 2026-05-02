@@ -82,34 +82,43 @@ def log_step(logger: logging.Logger, step_name: str, dataframe: pd.DataFrame) ->
     )
 
 
-def transform_data(logger: logging.Logger) -> pd.DataFrame:
-    logger.info("Loading input data from %s", INPUT_PATH)
-    data = pd.read_csv(INPUT_PATH)
-    log_step(logger, "Load data", data)
+def load_input_data(path: Path = INPUT_PATH) -> pd.DataFrame:
+    return pd.read_csv(path)
 
-    logger.info("Filtering loan_status values")
+
+def filter_loan_status(data: pd.DataFrame) -> pd.DataFrame:
+    data = data.copy()
     data = data[data["loan_status"] != "Current"].copy()
     data = data[data["loan_status"] != "Default"].copy()
-    data["loan_status"] = data["loan_status"].apply(lambda value: 1 if value in GOOD_STATUS else 0)
-    log_step(logger, "Filter and encode loan_status", data)
+    data["loan_status"] = data["loan_status"].apply(
+        lambda value: 1 if value in GOOD_STATUS else 0
+    )
+    return data
 
-    logger.info("Creating fico average and dropping unused columns")
+
+def create_fico_feature(data: pd.DataFrame) -> pd.DataFrame:
+    data = data.copy()
     data["fico"] = (data["fico_range_high"] + data["fico_range_low"]) / 2
-    data.drop(columns=DROP_COLS, inplace=True)
-    log_step(logger, "FICO feature engineering", data)
+    return data.drop(columns=DROP_COLS, errors="ignore")
 
-    logger.info("Encoding term")
+
+def encode_term(data: pd.DataFrame) -> pd.DataFrame:
+    data = data.copy()
     data["term"] = data["term"].apply(lambda value: value == "36 months").astype(int)
-    log_step(logger, "Encode term", data)
+    return data
 
-    logger.info("Encoding sub_grade")
+
+def encode_sub_grade(data: pd.DataFrame) -> pd.DataFrame:
+    data = data.copy()
     sub_grades = data["sub_grade"].unique()
     sorted_sub_grades = np.sort(sub_grades)[::-1]
     dict_sub_grades = {grade: index for index, grade in enumerate(sorted_sub_grades)}
     data["sub_grade"] = data["sub_grade"].apply(lambda value: dict_sub_grades[value])
-    log_step(logger, "Encode sub_grade", data)
+    return data
 
-    logger.info("Encoding emp_length")
+
+def encode_emp_length(data: pd.DataFrame) -> pd.DataFrame:
+    data = data.copy()
     dict_emp_length: dict[str, int] = {}
     for unique_value in data["emp_length"].unique():
         if unique_value == "10+ years":
@@ -122,27 +131,79 @@ def transform_data(logger: logging.Logger) -> pd.DataFrame:
             dict_emp_length[unique_value] = int(unique_value.split()[0])
 
     data["emp_length"] = data["emp_length"].apply(lambda value: dict_emp_length[value])
-    log_step(logger, "Encode emp_length", data)
+    return data
 
-    logger.info("Encoding pymnt_plan")
+
+def encode_pymnt_plan(data: pd.DataFrame) -> pd.DataFrame:
+    data = data.copy()
     data["pymnt_plan"] = data["pymnt_plan"].apply(lambda value: value == "y").astype(int)
-    log_step(logger, "Encode pymnt_plan", data)
+    return data
 
-    logger.info("Normalizing and one-hot encoding home_ownership")
+
+def one_hot_encode_columns(
+    data: pd.DataFrame,
+    columns: list[str],
+    logger: logging.Logger | None = None,
+) -> pd.DataFrame:
+    data = data.copy()
+    present_columns = [column for column in columns if column in data.columns]
+    if not present_columns:
+        return data
+    if logger is not None:
+        logger.info("One-hot encoding columns: %s", present_columns)
+    return pd.get_dummies(data, columns=present_columns, drop_first=False)
+
+
+def normalize_home_ownership(data: pd.DataFrame) -> pd.DataFrame:
+    data = data.copy()
     keep_home_ownership = ["RENT", "MORTGAGE", "OWN"]
     data["home_ownership"] = data["home_ownership"].where(
         data["home_ownership"].isin(keep_home_ownership),
         other="OTHER",
     )
-    data = pd.get_dummies(data, columns=["home_ownership"], drop_first=False)
+    return data
+
+
+def transform_data(logger: logging.Logger) -> pd.DataFrame:
+    logger.info("Loading input data from %s", INPUT_PATH)
+    data = load_input_data()
+    log_step(logger, "Load data", data)
+
+    logger.info("Filtering loan_status values")
+    data = filter_loan_status(data)
+    log_step(logger, "Filter and encode loan_status", data)
+
+    logger.info("Creating fico average and dropping unused columns")
+    data = create_fico_feature(data)
+    log_step(logger, "FICO feature engineering", data)
+
+    logger.info("Encoding term")
+    data = encode_term(data)
+    log_step(logger, "Encode term", data)
+
+    logger.info("Encoding sub_grade")
+    data = encode_sub_grade(data)
+    log_step(logger, "Encode sub_grade", data)
+
+    logger.info("Encoding emp_length")
+    data = encode_emp_length(data)
+    log_step(logger, "Encode emp_length", data)
+
+    logger.info("Encoding pymnt_plan")
+    data = encode_pymnt_plan(data)
+    log_step(logger, "Encode pymnt_plan", data)
+
+    logger.info("Normalizing and one-hot encoding home_ownership")
+    data = normalize_home_ownership(data)
+    data = one_hot_encode_columns(data, ["home_ownership"], logger)
     log_step(logger, "Encode home_ownership", data)
 
     logger.info("One-hot encoding verification_status")
-    data = pd.get_dummies(data, columns=["verification_status"], drop_first=False)
+    data = one_hot_encode_columns(data, ["verification_status"], logger)
     log_step(logger, "Encode verification_status", data)
 
     logger.info("One-hot encoding purpose")
-    data = pd.get_dummies(data, columns=["purpose"], drop_first=False)
+    data = one_hot_encode_columns(data, ["purpose"], logger)
     log_step(logger, "Encode purpose", data)
 
     object_cols = data.select_dtypes(include=["object"]).columns.tolist()
@@ -172,32 +233,49 @@ def normalize_train_test(
     return train, test
 
 
-def main() -> pd.DataFrame:
-    logger = setup_logging()
-    logger.info("Starting data transformation pipeline")
-    merged_df_transformed = transform_data(logger)
+def split_transformed_data(
+    merged_df_transformed: pd.DataFrame,
+    test_size: float = 0.2,
+    random_state: int = 42,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    train, test = train_test_split(
+        merged_df_transformed,
+        test_size=test_size,
+        random_state=random_state,
+        stratify=merged_df_transformed["loan_status"],
+    )
+    return train, test
+
+
+def save_transformation_outputs(
+    logger: logging.Logger,
+    merged_df_transformed: pd.DataFrame,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     logger.info("Saving transformed data to %s", OUTPUT_PATH)
     merged_df_transformed.to_csv(OUTPUT_PATH, index=False)
     logger.info("Saved transformed data with shape %s", merged_df_transformed.shape)
 
     logger.info("Splitting transformed data into train/test sets")
-    train, test = train_test_split(
-        merged_df_transformed,
-        test_size=0.2,
-        random_state=42,
-        stratify=merged_df_transformed["loan_status"],
-    )
+    train, test = split_transformed_data(merged_df_transformed)
 
     logger.info("Applying min-max normalization using train data only")
     train.to_csv(TRAIN_OUTPUT_PATH)
     train, test = normalize_train_test(train, test)
 
-    logger.info("Saving normalized train data to %s", TRAIN_OUTPUT_PATH)
+    logger.info("Saving normalized train data to %s", TRAIN_NORM_OUTPUT_PATH)
     train.to_csv(TRAIN_NORM_OUTPUT_PATH, index=False)
     logger.info("Saving normalized test data to %s", TEST_OUTPUT_PATH)
     test.to_csv(TEST_OUTPUT_PATH, index=False)
 
     logger.info("Saved train/test splits with shapes train=%s test=%s", train.shape, test.shape)
+    return train, test
+
+
+def main() -> pd.DataFrame:
+    logger = setup_logging()
+    logger.info("Starting data transformation pipeline")
+    merged_df_transformed = transform_data(logger)
+    save_transformation_outputs(logger, merged_df_transformed)
     return merged_df_transformed
 
 
