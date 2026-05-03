@@ -1,5 +1,6 @@
 .env
 data/
+.venv/
 *.log
 *.pdf
 **/__pycache__/
@@ -17,5 +18,4 @@ mlruns/
 mlflow.db
 .coverage
 htmlcov/
-# Never ignore the env template
 !.env.example

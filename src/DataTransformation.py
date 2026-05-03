@@ -82,7 +82,7 @@ def log_step(logger: logging.Logger, step_name: str, dataframe: pd.DataFrame) ->
         int(dataframe.isna().sum().sum()),
     )
 
-def save_business_statistics(logger: logging.Logger, data: pd.DataFrame, path: Path) -> None:
+def save_business_statistics(logger: logging.Logger, data: pd.DataFrame, path: str | Path) -> None:
     accepted_loans = data[data["loan_status"] == 0]
     rejected_loans = data[data["loan_status"] == 1]
     # Use only accepted loans to calculate average profit as total_pymnt > loan_amnt

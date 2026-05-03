@@ -128,7 +128,7 @@ class Model:
         plt.savefig(self.plots_dir / file_name, dpi=160, bbox_inches="tight")
         plt.close()
 
-    def _select_features(self, n_features: int = 30) -> pd.DataFrame:
+    def _select_features(self, n_features: int = 30):
         self.logger.info("Start selecting top features based on correlation with target.")
         self.selector = SelectKBest(score_func=f_classif, k=n_features)
         X_train_kbest = self.selector.fit_transform(self.X_train, self.y_train)
