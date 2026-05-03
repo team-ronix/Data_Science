@@ -90,7 +90,7 @@ class DataValidation:
             "suspected_type_mismatches": suspected_type_mismatches,
             "missing_values": self.missing_values
         }
-        self.logger.info(f"Profiling complete — {self.total_rows} rows, {self.total_cols} cols.")
+        self.logger.info(f"Profiling complete  {self.total_rows} rows, {self.total_cols} cols.")
         return profile
 
     def validate_categorical(self) -> Dict[str, Any]:
@@ -107,9 +107,9 @@ class DataValidation:
             has_inconsistencies = normalised_unique < unique_vals
             cardinality_flag = None
             if unique_vals == len(series):
-                cardinality_flag = "all_unique — possible ID column"
+                cardinality_flag = "all_unique  possible ID column"
             elif unique_vals == 1:
-                cardinality_flag = "constant — zero variance"
+                cardinality_flag = "constant  zero variance"
             elif unique_vals > 0.5 * len(series):
                 cardinality_flag = "high_cardinality"
             results[col] = {
@@ -246,9 +246,9 @@ class DataValidation:
         """Print the Great Expectations pass/fail table."""
         success = results.success
         print("=" * 58)
-        print("    DATA VALIDATION REPORT  (Great Expectations v1.x)")
+        print("DATA VALIDATION REPORT (Great Expectations v1.x)")
         print("=" * 58)
-        print(f"  Overall Result : {'PASSED' if success else 'FAILED'}")
+        print(f"Overall Result : {'PASSED' if success else 'FAILED'}")
         print("=" * 58)
 
         for exp_result in results.results:
@@ -272,9 +272,9 @@ class DataValidation:
                 continue
 
             if dimension == "Profile":
-                print(f"  - Row count             : {result['row_count']}")
-                print(f"  - Column count          : {result['col_count']}")
-                print(f"  - Missing values        : {result['missing_values']}")
+                print(f"  - Row count: {result['row_count']}")
+                print(f"  - Column count: {result['col_count']}")
+                print(f"  - Missing values: {result['missing_values']}")
                 if result["suspected_type_mismatches"]:
                     print(f"  - Suspected type mismatches: {result['suspected_type_mismatches']}")
                 print("  - Data types:")
@@ -282,18 +282,18 @@ class DataValidation:
                     print(f"    * {col}: {dtype}")
 
             elif dimension == "Duplicates":
-                print(f"  - Duplicate row count   : {result['duplicate_row_count']}")
+                print(f"  - Duplicate row count: {result['duplicate_row_count']}")
                 if result["sample_duplicate_indices"]:
-                    print(f"  - Sample indices        : {result['sample_duplicate_indices']}")
+                    print(f"  - Sample indices: {result['sample_duplicate_indices']}")
 
             elif dimension == "Categorical":
                 for col_name, metrics in result.items():
                     print(f"  - {col_name}:")
-                    print(f"      unique_count   : {metrics['unique_count']}")
-                    print(f"      top_5_values   : {metrics['top_5_values']}")
-                    print(f"      inconsistencies: {metrics['inconsistencies']}")
+                    print(f"unique_count: {metrics['unique_count']}")
+                    print(f"top_5_values: {metrics['top_5_values']}")
+                    print(f"inconsistencies: {metrics['inconsistencies']}")
                     if metrics["cardinality_flag"]:
-                        print(f"      cardinality    : {metrics['cardinality_flag']}")
+                        print(f"cardinality: {metrics['cardinality_flag']}")
 
             elif dimension == "Distribution":
                 for col_name, metrics in result.items():
@@ -308,7 +308,7 @@ class DataValidation:
                     print("  - Highly correlated pairs (|corr| >= 0.8):")
                     for pair in result["high_correlation_pairs"]:
                         print(
-                            f"      * {pair['column_a']} & {pair['column_b']}"
+                            f"* {pair['column_a']} & {pair['column_b']}"
                             f" (corr={pair['correlation']})"
                         )
 

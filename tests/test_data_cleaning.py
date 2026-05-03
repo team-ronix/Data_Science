@@ -1,8 +1,9 @@
 import pandas as pd
 import pytest
 
-from DataCleaning import (
+from src.DataCleaning import (
     DataCleaningPipeline,
+    clean_merged_dataset,
     clip_outliers,
     coerce_numeric_columns,
     finalize_types,
@@ -148,6 +149,11 @@ def test_clip_outliers_caps_extreme_values():
     assert result["loan_amnt"].max() < 1000
     assert result["loan_amnt"].min() == 10
 
+def test_clip_outliers_all_null_column_is_noop():
+    df = pd.DataFrame({"loan_amnt": [None, None, None]})
+    result = clip_outliers(df, columns=["loan_amnt"])
+    assert result["loan_amnt"].isna().all()
+
 
 def test_finalize_types_converts_expected_columns_to_nullable_int():
     df = pd.DataFrame(
@@ -169,7 +175,7 @@ def test_finalize_types_converts_expected_columns_to_nullable_int():
 
 def test_pipeline_execute_runs_steps_and_builds_report(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "log").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "logs").mkdir(parents=True, exist_ok=True)
 
     def add_one_column(df: pd.DataFrame) -> pd.DataFrame:
         out = df.copy()
@@ -191,7 +197,7 @@ def test_pipeline_execute_runs_steps_and_builds_report(tmp_path, monkeypatch):
 
 def test_pipeline_execute_raises_and_logs_failure(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "log").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "logs").mkdir(parents=True, exist_ok=True)
 
     def fail_step(df: pd.DataFrame) -> pd.DataFrame:
         raise ValueError("boom")
@@ -207,5 +213,33 @@ def test_pipeline_execute_raises_and_logs_failure(tmp_path, monkeypatch):
     assert report.loc[0, "step"] == "Failing Step"
     assert report.loc[0, "status"] == "failed"
 
+def _identity_step(df: pd.DataFrame) -> pd.DataFrame:
+    return df
 
-    
+def test_pipeline_save_and_load_round_trip(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "logs").mkdir(parents=True, exist_ok=True)
+
+    pipeline = DataCleaningPipeline(name="save-load-test")
+    pipeline.add_step("identity", _identity_step)
+    path = str(tmp_path / "pipeline.pkl")
+    pipeline.save_pipeline(path)
+
+    new_pipeline = DataCleaningPipeline(name="loaded")
+    new_pipeline.load_pipeline(path)
+
+    assert len(new_pipeline.steps) == 1
+    assert new_pipeline.steps[0]["name"] == "identity"
+
+def test_clean_merged_dataset_end_to_end(tmp_path):
+    input_csv = tmp_path / "merged_df.csv"
+    output_csv = tmp_path / "output.csv"
+    df = pd.DataFrame({
+        "id": [1, 2], "issue_d": ["2020-01-01", "2020-02-01"],
+        "loan_amnt": [1000.0, 2000.0], "int_rate": ["5%", "10%"],
+        "term": ["36 months", "60 months"],
+    })
+    df.to_csv(input_csv, index=False)
+    result = clean_merged_dataset(input_path=input_csv, output_path=output_csv)
+    assert output_csv.exists()
+    assert len(result) == 2
