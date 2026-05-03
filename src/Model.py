@@ -126,7 +126,7 @@ class Model:
         X_test_kbest = self.selector.transform(self.X_test)
         selected_mask = self.selector.get_support()
         self.selected_feature_names = list(self.X_train.columns[selected_mask])
-        return X_train_kbest, X_test_kbest
+        return X_train_kbest, X_test_kbest, self.selected_feature_names
 
     def _save_inference_bundle(self, tuned_models: dict, results: list) -> None:
         test_results = [
@@ -152,11 +152,13 @@ class Model:
         }
 
         output_bundle_path = self.output_dir / "inference_bundle.pkl"
-        joblib.dump(bundle, output_bundle_path)
+        with open(output_bundle_path, "wb") as f:
+            pickle.dump(bundle, f)
 
         app_model_path = Path("models") / "model.pkl"
         app_model_path.parent.mkdir(parents=True, exist_ok=True)
-        joblib.dump(bundle, app_model_path)
+        with open(app_model_path, "wb") as f:
+            pickle.dump(bundle, f)
 
         self.logger.info(
             f"Inference bundle saved for API: {app_model_path} (best model: {best_name}, F2={best_result['f2']:.4f})"
@@ -391,8 +393,7 @@ class Model:
         self.logger.info(f"Scores saved to {self.output_dir}/model_scores.csv")
  
     def run(self) -> list:
-        X_train_selected, X_test_selected, selected_features = self._select_features(n_features=30)
-        self.logger.info(f"Selected top features: {', '.join(selected_features)}")
+        X_train_selected, X_test_selected, _ = self._select_features(n_features=30)
         models = {
             "ZeroR Baseline": DummyClassifier(strategy="most_frequent"),
             "Logistic Regression": LogisticRegression(
