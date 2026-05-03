@@ -1,7 +1,7 @@
 import logging
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, patch, mock_open
+from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
@@ -12,7 +12,6 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from EDA import (
-    setup_logging,
     load_data,
     build_target,
     savefig,
