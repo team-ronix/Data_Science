@@ -90,8 +90,6 @@ def savefig(name):
     return p
 
 
-#  Overview 
-
 def overview(df, logger):
     logger.info("Data overview")
     meta = {
@@ -109,8 +107,6 @@ def overview(df, logger):
         "meta": meta,
     }
 
-
-#  Missing values 
 
 def plot_missing(df, logger):
     missing = df.isnull().mean().sort_values(ascending=False)
@@ -135,8 +131,6 @@ def plot_missing(df, logger):
     plt.tight_layout()
     return savefig("01_missing_values")
 
-
-#  Target distribution 
 
 def check_target_distribution(df, logger):
     out = {}
@@ -180,9 +174,6 @@ def check_target_distribution(df, logger):
     out["fig"] = savefig("02_target_distribution")
     return out
 
-
-#  Correlation heatmap 
-
 def plot_correlation(df, logger):
     logger.info("Correlation heatmap")
     num_df = df.select_dtypes(include="number")
@@ -197,8 +188,6 @@ def plot_correlation(df, logger):
     plt.tight_layout()
     return savefig("03_correlation_heatmap")
 
-
-#  Univariate distributions 
 
 def plot_univariate(df, logger):
     num_cols = df.select_dtypes(include="number").columns.tolist()
@@ -235,8 +224,6 @@ def plot_univariate(df, logger):
         figs.append(savefig(f"04_univariate_cat_{col}"))
 
     return figs
-
-#  Default rate by categorical feature 
 
 def default_by_category(df, logger):
     if "target_default" not in df.columns:
@@ -277,8 +264,6 @@ def default_by_category(df, logger):
     return figs
 
 
-#  Numeric features vs default 
-
 def numeric_vs_default(df, logger):
     if "target_default" not in df.columns:
         return []
@@ -312,8 +297,6 @@ def numeric_vs_default(df, logger):
     return figs
 
 
-#  Interest rate 
-
 def plot_interest_rate(df, logger):
     if "int_rate" not in df.columns or "target_default" not in df.columns:
         return None
@@ -341,8 +324,6 @@ def plot_interest_rate(df, logger):
     return savefig("09_interest_rate")
 
 
-#  DTI 
-
 def plot_dti(df, logger):
     if "dti" not in df.columns or "target_default" not in df.columns:
         return None
@@ -368,8 +349,6 @@ def plot_dti(df, logger):
     plt.tight_layout()
     return savefig("10_dti_analysis")
 
-
-#  Loan grade 
 
 def plot_loan_grade(df, logger):
     if "sub_grade" not in df.columns or "target_default" not in df.columns:
@@ -401,8 +380,6 @@ def plot_loan_grade(df, logger):
     plt.tight_layout()
     return savefig("11_loan_grade")
 
-
-#  Employment length 
 
 def plot_emp_length(df, logger):
     if "emp_length" not in df.columns or "target_default" not in df.columns:
@@ -437,8 +414,6 @@ def plot_emp_length(df, logger):
     return savefig("12_emp_length")
 
 
-#  Annual income 
-
 def plot_annual_income(df, logger):
     if "annual_inc" not in df.columns or "target_default" not in df.columns:
         return None
@@ -462,8 +437,6 @@ def plot_annual_income(df, logger):
     plt.tight_layout()
     return savefig("13_annual_income")
 
-
-#  Loan purpose 
 
 def plot_purpose(df, logger):
     if "purpose" not in df.columns or "target_default" not in df.columns:
@@ -489,9 +462,6 @@ def plot_purpose(df, logger):
     axes[1].set_xlabel("Loans")
     plt.tight_layout()
     return savefig("14_loan_purpose")
-
-
-#  FICO 
 
 def plot_fico(df, logger):
     fico_col = next((c for c in ["fico_range_high", "fico_range_low", "fico"] if c in df.columns), None)
@@ -536,8 +506,6 @@ def plot_fico(df, logger):
     return savefig("15_fico_analysis")
 
 
-#  Home ownership 
-
 def plot_home_ownership(df, logger):
     if "home_ownership" not in df.columns or "target_default" not in df.columns:
         return None
@@ -566,7 +534,6 @@ def plot_home_ownership(df, logger):
     return savefig("16_home_ownership")
 
 
-#  Verification status 
 
 def plot_verification(df, logger):
     if "verification_status" not in df.columns or "target_default" not in df.columns:
@@ -601,7 +568,6 @@ def plot_verification(df, logger):
     return savefig("17_verification_status")
 
 
-#  Temporal trends 
 
 def plot_temporal(df, logger):
     date_col = next((c for c in ["issue_d", "earliest_cr_line"] if c in df.columns), None)
@@ -647,7 +613,6 @@ def plot_temporal(df, logger):
     return savefig("19_temporal_trends")
 
 
-#  Top correlated pairs 
 
 def top_corr_pairs(df, logger):
     logger.info("Top correlated pairs")
@@ -671,7 +636,6 @@ def top_corr_pairs(df, logger):
     return {"top_pairs": top, "fig": savefig("20_top_corr_pairs")}
 
 
-#  Feature importance 
 
 def feature_importance(df, logger):
     if "target_default" not in df.columns:
@@ -719,8 +683,6 @@ def feature_importance(df, logger):
     ax.legend()
     plt.tight_layout()
     return {"summary": summary, "fig": savefig("21_feature_importance")}
-
-#  HTML report 
 
 def make_report(meta, target_info, top_pairs, imp, logger):
     logger.info("Building HTML report")
@@ -829,9 +791,6 @@ def make_report(meta, target_info, top_pairs, imp, logger):
     out.write_text(html, encoding="utf-8")
     logger.info("Report saved: %s", out)
     return out
-
-
-#  Main 
 
 def main():
     logger = setup_logging()
