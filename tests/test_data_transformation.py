@@ -219,9 +219,10 @@ def test_transform_data_runs_end_to_end(monkeypatch, tmp_path):
         }
     )
     monkeypatch.setattr(pd, "read_csv", lambda *args, **kwargs: df_in)
-
+    input_path = tmp_path / "data" / "input.csv"
+    busniess_stat = tmp_path / "data" / "business_statistics.csv"
     logger = make_logger()
-    result = transform_data(logger)
+    result = transform_data(logger, input_path, busniess_stat)
 
     assert "loan_status" in result.columns
     assert result["loan_status"].isin([0, 1]).all()
