@@ -1,0 +1,32 @@
+# Source control
+.git
+.github
+
+# Python cache
+**/__pycache__
+*.pyc
+*.pyo
+*.pyd
+
+# Dev / data files
+.venv
+data/
+logs/
+mlruns/
+mlflow.db
+model_outputs/
+eda_outputs/
+
+# Project files not needed in the image
+tests/
+notes.txt
+*.md
+pyproject.toml
+poetry.lock
+pipeline_run.ps1
+DataCleaning.py
+DataCollection.py
+DataTransformation.py
+DataValidation.py
+Model.py
+data_science_project/

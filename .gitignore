@@ -2,13 +2,17 @@
 data/
 *.log
 *.pdf
-__pycache__/*
+**/__pycache__/
+*.pyc
+*.pkl
 *.zip
 *.docx
 *.html
 *.ipynb
-tests/__pycache__/*
 eda_outputs/
 model_outputs/
 mlruns/
 mlflow.db
+
+# Never ignore the env template
+!.env.example
