@@ -1,4 +1,3 @@
-import argparse
 import os
 import logging
 import pandas as pd
@@ -7,14 +6,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 import pickle
+import joblib
 import mlflow
+import mlflow.sklearn
 
 from sklearn.feature_selection import SelectKBest, f_classif
 from sklearn.dummy import DummyClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import LinearSVC
-from sklearn.ensemble import AdaBoostClassifier, BaggingClassifier
-from sklearn.tree import DecisionTreeClassifier
 from xgboost import XGBClassifier
 from sklearn.model_selection import RandomizedSearchCV, StratifiedKFold
 from sklearn.metrics import (
@@ -47,7 +46,8 @@ class Model:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.plots_dir.mkdir(parents=True, exist_ok=True)
         
-        db_path = Path(__file__).parent.parent / "mlflow.db"
+        # Setup MLflow
+        db_path = Path(__file__).parent / "mlflow.db"
         mlflow.set_tracking_uri(f"sqlite:///{db_path.as_posix()}")
         self.mlflow_experiment_name = "Loan_Status_Classification"
         mlflow.set_experiment(self.mlflow_experiment_name)
@@ -69,15 +69,19 @@ class Model:
 
     def _extract_hyperparameters(self, name: str, model) -> dict:
         params = {}
+        
         if hasattr(model, 'get_params'):
             model_params = model.get_params()
+            # Filter to only include main hyperparameters (exclude estimator__ nested params for clarity)
             for key, value in model_params.items():
                 if not key.startswith('estimator__'):
                     try:
+                        # Convert to string to ensure MLflow compatibility
                         params[key] = str(value)
                     except Exception:
                         pass
         
+        # Add custom CV best params if available (from hyperparameter tuning)
         if hasattr(model, '_cv_best_params'):
             for key, value in model._cv_best_params.items():
                 try:
@@ -88,7 +92,13 @@ class Model:
         return params
 
     def _compute_business_metrics(self, cm: np.ndarray) -> dict:
+        """
+        Compute business-related metrics for the lending club context.
+        Assumption: Class 0 = Charge Off (bad loan), Class 1 = Fully Paid (good loan)
+        """
         tn, fp, fn, tp = cm.ravel()
+        
+        # Business metrics
         avg_loan_profit = self.business_statistics["avg_loan_profit"].iloc[0]
         avg_loan_amount = self.business_statistics["avg_loan_amount"].iloc[0]
         
@@ -125,7 +135,7 @@ class Model:
         X_test_kbest = self.selector.transform(self.X_test)
         selected_mask = self.selector.get_support()
         self.selected_feature_names = list(self.X_train.columns[selected_mask])
-        return X_train_kbest, X_test_kbest, self.selected_feature_names
+        return X_train_kbest, X_test_kbest
 
     def _save_inference_bundle(self, tuned_models: dict, results: list) -> None:
         test_results = [
@@ -151,13 +161,11 @@ class Model:
         }
 
         output_bundle_path = self.output_dir / "inference_bundle.pkl"
-        with open(output_bundle_path, "wb") as f:
-            pickle.dump(bundle, f)
+        joblib.dump(bundle, output_bundle_path)
 
         app_model_path = Path("models") / "model.pkl"
         app_model_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(app_model_path, "wb") as f:
-            pickle.dump(bundle, f)
+        joblib.dump(bundle, app_model_path)
 
         self.logger.info(
             f"Inference bundle saved for API: {app_model_path} (best model: {best_name}, F2={best_result['f2']:.4f})"
@@ -174,12 +182,12 @@ class Model:
                 "solver": ["lbfgs", "liblinear"],
                 "max_iter": [200, 300, 500, 1000],
             },
-            "AdaBoost": {
-                "n_estimators": [100, 200, 300, 400],
-                "learning_rate": [0.01, 0.05, 0.1, 0.3, 0.5, 1.0],
-                "estimator__max_depth": [1, 2, 3],
-                "estimator__min_samples_leaf": [1, 5, 10, 20],
-            },
+            # "AdaBoost": {
+            #     "n_estimators": [100, 200, 300, 400],
+            #     "learning_rate": [0.01, 0.05, 0.1, 0.3, 0.5, 1.0],
+            #     "estimator__max_depth": [1, 2, 3],
+            #     "estimator__min_samples_leaf": [1, 5, 10, 20],
+            # },
             "LinearSVC": {
                 "C": [0.01, 0.1, 1.0, 10.0],
                 "tol": [1e-4, 1e-3, 1e-2],
@@ -199,13 +207,13 @@ class Model:
                     scale_pos_weight * 1.5,
                 ],
             },
-            "Bagging": {
-                "n_estimators": [100, 200, 300],
-                "max_samples": [0.6, 0.8, 1.0],
-                "max_features": [0.6, 0.8, 1.0],
-                "bootstrap": [True],
-                "bootstrap_features": [False, True],
-            }
+            # "Bagging": {
+            #     "n_estimators": [100, 200, 300],
+            #     "max_samples": [0.6, 0.8, 1.0],
+            #     "max_features": [0.6, 0.8, 1.0],
+            #     "bootstrap": [True],
+            #     "bootstrap_features": [False, True],
+            # }
         }
 
         if name not in param_distributions:
@@ -264,13 +272,17 @@ class Model:
         ax.set_title(f"{name} - Confusion Matrix")
         self._save_matplotlib_plot(f"{name.replace(' ', '_')}_{stage}_confusion_matrix.png")
 
+        # ===== MLflow Logging =====
         with mlflow.start_run(run_name=f"{name} ({stage})"):
+            # Log model name
             mlflow.set_tag("model_name", name)
             
+            # Extract and log hyperparameters
             params = self._extract_hyperparameters(name, model)
             for param_name, param_value in params.items():
                 mlflow.log_param(param_name, param_value)
             
+            # Log standard metrics
             mlflow.log_metric(f"accuracy_{stage}", acc)
             mlflow.log_metric(f"precision_{stage}", precision)
             mlflow.log_metric(f"recall_{stage}", recall)
@@ -278,6 +290,7 @@ class Model:
             if roc_auc is not None:
                 mlflow.log_metric(f"roc_auc_{stage}", roc_auc)
             
+            # Log business metrics
             business_metrics = self._compute_business_metrics(cm)
             mlflow.log_metric(f"false_positive_rate_{stage}", business_metrics["false_positive_rate"])
             mlflow.log_metric(f"true_positive_rate_{stage}", business_metrics["true_positive_rate"])
@@ -286,26 +299,34 @@ class Model:
             mlflow.log_metric(f"avg_lost_loans_amount_{stage}", business_metrics["avg_lost_loans_amount"])
             mlflow.log_metric(f"avg_saved_loans_amnts_{stage}", business_metrics["avg_saved_loans_amnts"])
 
+            # Log confusion matrix values
             tn, fp, fn, tp = cm.ravel()
             mlflow.log_metric(f"true_negatives_{stage}", int(tn))
             mlflow.log_metric(f"false_positives_{stage}", int(fp))
             mlflow.log_metric(f"false_negatives_{stage}", int(fn))
             mlflow.log_metric(f"true_positives_{stage}", int(tp))
             
+            # Log classification report as artifact
             report_file = self.output_dir / f"{name.replace(' ', '_')}_{stage}_classification_report.txt"
             with open(report_file, 'w') as f:
                 f.write(report)
             mlflow.log_artifact(str(report_file))
             
+            # Log confusion matrix plot
             cm_plot_file = self.plots_dir / f"{name.replace(' ', '_')}_{stage}_confusion_matrix.png"
             if cm_plot_file.exists():
                 mlflow.log_artifact(str(cm_plot_file))
             
-            if name != "ZeroR Baseline" and stage == "test":
-                model_file = self.output_dir / f"{name.replace(' ', '_')}_model.pkl"
-                with open(model_file, 'wb') as f:
-                    pickle.dump(model, f)
-                mlflow.log_artifact(str(model_file))
+            # Save model as artifact (except for DummyClassifier)
+            if name != "ZeroR Baseline":
+                try:
+                    mlflow.sklearn.log_model(model, f"{name.replace(' ', '_')}_model")
+                except Exception:
+                    # Fallback for non-sklearn models
+                    model_file = self.output_dir / f"{name.replace(' ', '_')}_model.pkl"
+                    with open(model_file, 'wb') as f:
+                        pickle.dump(model, f)
+                    mlflow.log_artifact(str(model_file))
 
         return {
             "name": name, "model": model, "stage": stage,
@@ -392,7 +413,7 @@ class Model:
         self.logger.info(f"Scores saved to {self.output_dir}/model_scores.csv")
  
     def run(self) -> list:
-        X_train_selected, X_test_selected, _ = self._select_features(n_features=30)
+        X_train_selected, X_test_selected = self._select_features(n_features=30)
         models = {
             "ZeroR Baseline": DummyClassifier(strategy="most_frequent"),
             "Logistic Regression": LogisticRegression(
@@ -404,12 +425,12 @@ class Model:
                 class_weight="balanced",
                 random_state=39,
             ),
-            "AdaBoost": AdaBoostClassifier(
-                estimator=DecisionTreeClassifier(
-                    max_depth=2, min_samples_leaf=10, random_state=39, class_weight="balanced"
-                ),
-                n_estimators=300, learning_rate=0.5, random_state=39
-            ),
+            # "AdaBoost": AdaBoostClassifier(
+            #     estimator=DecisionTreeClassifier(
+            #         max_depth=2, min_samples_leaf=10, random_state=39, class_weight="balanced"
+            #     ),
+            #     n_estimators=300, learning_rate=0.5, random_state=39
+            # ),
             "XGBoost": XGBClassifier(
                 n_estimators=300,
                 max_depth=6,
@@ -419,15 +440,15 @@ class Model:
                 random_state=39,
                 eval_metric="logloss",
             ),
-            "Bagging": BaggingClassifier(
-                estimator=DecisionTreeClassifier(random_state=39, class_weight="balanced"),
-                n_estimators=200,
-                max_samples=0.8,
-                max_features=0.8,
-                bootstrap=True,
-                random_state=39,
-                n_jobs=-1,
-            ),
+            # "Bagging": BaggingClassifier(
+            #     estimator=DecisionTreeClassifier(random_state=39, class_weight="balanced"),
+            #     n_estimators=200,
+            #     max_samples=0.8,
+            #     max_features=0.8,
+            #     bootstrap=True,
+            #     random_state=39,
+            #     n_jobs=-1,
+            # ),
         }
 
         tuned_models = {}
@@ -456,22 +477,10 @@ class Model:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Train and evaluate loan models")
-    parser.add_argument("--train-data", default="data/train_undersampled.csv",
-                        help="Path to normalized train dataset")
-    parser.add_argument("--test-data", default="data/test.csv",
-                        help="Path to test dataset")
-    parser.add_argument("--business-stats", default="data/business_statistics.csv",
-                        help="Path to business statistics")
-    parser.add_argument("--output-dir", default="model_outputs",
-                        help="Directory to save model outputs")
-    parser.add_argument("--random-search-iter", type=int, default=10,
-                        help="Number of random search iterations for hyperparameter tuning")
-    args = parser.parse_args()
-
-    train = pd.read_csv(args.train_data)
-    test = pd.read_csv(args.test_data)
-    business_statistics = pd.read_csv(args.business_stats)
+    data_folder = Path("data")
+    train = pd.read_csv(data_folder / "train_undersampled.csv")
+    test = pd.read_csv(data_folder / "test.csv")
+    business_statistics = pd.read_csv(data_folder / "business_statistics.csv")
     print(f"Train shape: {train.shape}, Test shape: {test.shape}")
     model_dev = Model(
         X_train=train.drop(columns=["loan_status"]),
@@ -479,7 +488,7 @@ if __name__ == "__main__":
         X_test=test.drop(columns=["loan_status"]),
         y_test=test["loan_status"],
         business_statistics=business_statistics,
-        output_dir=args.output_dir,
-        random_search_iter=args.random_search_iter,
+        output_dir="model_outputs",
+        random_search_iter=5,
     )
     results = model_dev.run()

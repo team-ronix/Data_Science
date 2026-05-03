@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+import argparse
 import logging
 from pathlib import Path
 
@@ -8,13 +8,14 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 
 
-BASE_DIR = Path(__file__).resolve().parent
+BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_PATH = BASE_DIR / "data" / "merged_df_cleaned.csv"
 OUTPUT_PATH = BASE_DIR / "data" / "merged_df_transformed.csv"
 TRAIN_OUTPUT_PATH = BASE_DIR / "data" / "train.csv"
 TRAIN_NORM_OUTPUT_PATH = BASE_DIR / "data" / "train_norm.csv"
 TEST_OUTPUT_PATH = BASE_DIR / "data" / "test.csv"
 LOG_PATH = BASE_DIR / "logs/DataTransformationPipeline.log"
+BUSINESS_STATS_PATH = BASE_DIR / "data" / "business_statistics.csv"
 
 GOOD_STATUS = [
     "Fully Paid",
@@ -81,7 +82,7 @@ def log_step(logger: logging.Logger, step_name: str, dataframe: pd.DataFrame) ->
         int(dataframe.isna().sum().sum()),
     )
 
-def save_business_statistics(logger: logging.Logger, data: pd.DataFrame) -> None:
+def save_business_statistics(logger: logging.Logger, data: pd.DataFrame, path: str | Path) -> None:
     accepted_loans = data[data["loan_status"] == 0]
     rejected_loans = data[data["loan_status"] == 1]
     # Use only accepted loans to calculate average profit as total_pymnt > loan_amnt
@@ -93,9 +94,9 @@ def save_business_statistics(logger: logging.Logger, data: pd.DataFrame) -> None
         "avg_loan_loss": [avg_loan_loss],
         "avg_loan_amount": [avg_loan_amount]
     })
-    statistics.to_csv(BASE_DIR / "data" / "business_statistics.csv", index=False)
+    statistics.to_csv(path, index=False)
 
-def load_input_data(path: Path = INPUT_PATH) -> pd.DataFrame:
+def load_input_data(path: str | Path = INPUT_PATH) -> pd.DataFrame:
     return pd.read_csv(path)
 
 
@@ -177,9 +178,14 @@ def normalize_home_ownership(data: pd.DataFrame) -> pd.DataFrame:
     return data
 
 
-def transform_data(logger: logging.Logger) -> pd.DataFrame:
-    logger.info("Loading input data from %s", INPUT_PATH)
-    data = load_input_data()
+def transform_data(
+        logger: logging.Logger, 
+        input_path: str | Path = INPUT_PATH,
+        business_stats_path: str | Path = BUSINESS_STATS_PATH
+    ) -> pd.DataFrame:
+    input_path = Path(input_path)
+    logger.info("Loading input data from %s", input_path)
+    data = load_input_data(input_path)
     log_step(logger, "Load data", data)
 
     logger.info("Filtering loan_status values")
@@ -187,7 +193,7 @@ def transform_data(logger: logging.Logger) -> pd.DataFrame:
     log_step(logger, "Filter and encode loan_status", data)
     
     logger.info("Saving business statistics before transformation and dropping unused columns")
-    save_business_statistics(logger, data)
+    save_business_statistics(logger, data, business_stats_path)
 
     logger.info("Creating fico average and dropping unused columns")
     data = create_fico_feature(data)
@@ -266,32 +272,71 @@ def split_transformed_data(
 def save_transformation_outputs(
     logger: logging.Logger,
     merged_df_transformed: pd.DataFrame,
+    output_path: Path = OUTPUT_PATH,
+    train_output_path: Path = TRAIN_OUTPUT_PATH,
+    train_norm_output_path: Path = TRAIN_NORM_OUTPUT_PATH,
+    test_output_path: Path = TEST_OUTPUT_PATH,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    logger.info("Saving transformed data to %s", OUTPUT_PATH)
-    merged_df_transformed.to_csv(OUTPUT_PATH, index=False)
+    output_path = Path(output_path)
+    train_output_path = Path(train_output_path)
+    train_norm_output_path = Path(train_norm_output_path)
+    test_output_path = Path(test_output_path)
+    
+    logger.info("Saving transformed data to %s", output_path)
+    merged_df_transformed.to_csv(output_path, index=False)
     logger.info("Saved transformed data with shape %s", merged_df_transformed.shape)
 
     logger.info("Splitting transformed data into train/test sets")
     train, test = split_transformed_data(merged_df_transformed)
 
     logger.info("Applying min-max normalization using train data only")
-    train.to_csv(TRAIN_OUTPUT_PATH)
+    train.to_csv(train_output_path)
     train, test = normalize_train_test(train, test)
 
-    logger.info("Saving normalized train data to %s", TRAIN_NORM_OUTPUT_PATH)
-    train.to_csv(TRAIN_NORM_OUTPUT_PATH, index=False)
-    logger.info("Saving normalized test data to %s", TEST_OUTPUT_PATH)
-    test.to_csv(TEST_OUTPUT_PATH, index=False)
+    logger.info("Saving normalized train data to %s", train_norm_output_path)
+    train.to_csv(train_norm_output_path, index=False)
+    logger.info("Saving normalized test data to %s", test_output_path)
+    test.to_csv(test_output_path, index=False)
 
     logger.info("Saved train/test splits with shapes train=%s test=%s", train.shape, test.shape)
     return train, test
 
 
-def main() -> pd.DataFrame:
+def main(
+    input_path: str | Path = INPUT_PATH,
+    output_path: str | Path = OUTPUT_PATH,
+    train_output_path: str | Path = TRAIN_OUTPUT_PATH,
+    train_norm_output_path: str | Path = TRAIN_NORM_OUTPUT_PATH,
+    test_output_path: str | Path = TEST_OUTPUT_PATH,
+    business_stats_path: str | Path = BUSINESS_STATS_PATH,
+) -> pd.DataFrame:    
+    # Convert all to Path objects
+    input_path = Path(input_path)
+    output_path = Path(output_path)
+    train_output_path = Path(train_output_path)
+    train_norm_output_path = Path(train_norm_output_path)
+    test_output_path = Path(test_output_path)
+    business_stats_path = Path(business_stats_path)
+    
+    # Create output directories
+    for path in [output_path, train_output_path, train_norm_output_path, test_output_path, business_stats_path]:
+        path.parent.mkdir(parents=True, exist_ok=True)
+    
     logger = setup_logging()
     logger.info("Starting data transformation pipeline")
-    merged_df_transformed = transform_data(logger)
-    save_transformation_outputs(logger, merged_df_transformed)
+    merged_df_transformed = transform_data(
+        logger, 
+        input_path, 
+        business_stats_path
+    )
+    save_transformation_outputs(
+        logger, 
+        merged_df_transformed,
+        output_path,
+        train_output_path,
+        train_norm_output_path,
+        test_output_path,
+    )
     return merged_df_transformed
 
 
@@ -299,4 +344,26 @@ merged_df_transformed: pd.DataFrame | None = None
 
 
 if __name__ == "__main__":
-    merged_df_transformed = main()
+    parser = argparse.ArgumentParser(description="Transform and split loan data")
+    parser.add_argument("--input", default=INPUT_PATH,
+                        help="Path to input cleaned dataset (default: data/merged_df_cleaned.csv)")
+    parser.add_argument("--output", default=OUTPUT_PATH,
+                        help="Path to save transformed dataset (default: data/merged_df_transformed.csv)")
+    parser.add_argument("--train-output", default=TRAIN_OUTPUT_PATH,
+                        help="Path to save train split (default: data/train.csv)")
+    parser.add_argument("--train-norm-output", default=TRAIN_NORM_OUTPUT_PATH,
+                        help="Path to save normalized train split (default: data/train_norm.csv)")
+    parser.add_argument("--test-output", default=TEST_OUTPUT_PATH,
+                        help="Path to save test split (default: data/test.csv)")
+    parser.add_argument("--business-stats", default=BUSINESS_STATS_PATH,
+                        help="Path to save business statistics (default: data/business_statistics.csv)")
+    args = parser.parse_args()
+    
+    merged_df_transformed = main(
+        input_path=args.input,
+        output_path=args.output,
+        train_output_path=args.train_output,
+        train_norm_output_path=args.train_norm_output,
+        test_output_path=args.test_output,
+        business_stats_path=args.business_stats,
+    )

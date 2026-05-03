@@ -9,6 +9,7 @@ data/
 *.docx
 *.html
 *.ipynb
+logs/
 src/__pycache__/*
 tests/__pycache__/*
 eda_outputs/

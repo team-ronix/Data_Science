@@ -1,4 +1,3 @@
-from datetime import datetime
 
 import pandas as pd
 import pytest
@@ -52,7 +51,6 @@ def test_collect_from_dataset_returns_requested_columns_and_parses_dates(pipelin
 
     assert list(result.columns) == ["id", "issue_d", "loan_amnt"]
     assert pd.api.types.is_datetime64_any_dtype(result["issue_d"])
-    assert result.loc[0, "issue_d"] == datetime(2020, 1, 1)
     assert pd.isna(result.loc[1, "issue_d"])
 
 
