@@ -7,7 +7,6 @@ import matplotlib.pyplot as plt
 
 import pickle
 import mlflow
-import mlflow.sklearn
 
 from sklearn.feature_selection import SelectKBest, f_classif
 from sklearn.dummy import DummyClassifier
@@ -47,8 +46,7 @@ class Model:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.plots_dir.mkdir(parents=True, exist_ok=True)
         
-        # Setup MLflow
-        db_path = Path(__file__).parent / "mlflow.db"
+        db_path = Path(__file__).parent.parent / "mlflow.db"
         mlflow.set_tracking_uri(f"sqlite:///{db_path.as_posix()}")
         self.mlflow_experiment_name = "Loan_Status_Classification"
         mlflow.set_experiment(self.mlflow_experiment_name)
@@ -70,19 +68,15 @@ class Model:
 
     def _extract_hyperparameters(self, name: str, model) -> dict:
         params = {}
-        
         if hasattr(model, 'get_params'):
             model_params = model.get_params()
-            # Filter to only include main hyperparameters (exclude estimator__ nested params for clarity)
             for key, value in model_params.items():
                 if not key.startswith('estimator__'):
                     try:
-                        # Convert to string to ensure MLflow compatibility
                         params[key] = str(value)
                     except:
                         pass
         
-        # Add custom CV best params if available (from hyperparameter tuning)
         if hasattr(model, '_cv_best_params'):
             for key, value in model._cv_best_params.items():
                 try:
@@ -93,13 +87,7 @@ class Model:
         return params
 
     def _compute_business_metrics(self, cm: np.ndarray) -> dict:
-        """
-        Compute business-related metrics for the lending club context.
-        Assumption: Class 0 = Charge Off (bad loan), Class 1 = Fully Paid (good loan)
-        """
         tn, fp, fn, tp = cm.ravel()
-        
-        # Business metrics
         avg_loan_profit = self.business_statistics["avg_loan_profit"].iloc[0]
         avg_loan_amount = self.business_statistics["avg_loan_amount"].iloc[0]
         
@@ -129,12 +117,16 @@ class Model:
         plt.savefig(self.plots_dir / file_name, dpi=160, bbox_inches="tight")
         plt.close()
 
-    def _select_features(self, n_features: int = 30) -> pd.DataFrame:
+    def _select_features(self, n_features: int = 30):
         self.logger.info("Start selecting top features based on correlation with target.")
         selector = SelectKBest(score_func=f_classif, k=n_features)
+        
         X_train_kbest = selector.fit_transform(self.X_train, self.y_train)
         X_test_kbest = selector.transform(self.X_test)
-        return X_train_kbest, X_test_kbest
+
+        selected_mask = selector.get_support()
+        selected_features = self.X_train.columns[selected_mask]
+        return X_train_kbest, X_test_kbest, selected_features
 
     def _random_search_tune(self, name: str, model, X_train, y_train):
         scale_pos_weight = (y_train == 0).sum() / ((y_train == 1).sum() + 1e-6)
@@ -237,17 +229,13 @@ class Model:
         ax.set_title(f"{name} - Confusion Matrix")
         self._save_matplotlib_plot(f"{name.replace(' ', '_')}_{stage}_confusion_matrix.png")
 
-        # ===== MLflow Logging =====
         with mlflow.start_run(run_name=f"{name} ({stage})"):
-            # Log model name
             mlflow.set_tag("model_name", name)
             
-            # Extract and log hyperparameters
             params = self._extract_hyperparameters(name, model)
             for param_name, param_value in params.items():
                 mlflow.log_param(param_name, param_value)
             
-            # Log standard metrics
             mlflow.log_metric(f"accuracy_{stage}", acc)
             mlflow.log_metric(f"precision_{stage}", precision)
             mlflow.log_metric(f"recall_{stage}", recall)
@@ -255,7 +243,6 @@ class Model:
             if roc_auc is not None:
                 mlflow.log_metric(f"roc_auc_{stage}", roc_auc)
             
-            # Log business metrics
             business_metrics = self._compute_business_metrics(cm)
             mlflow.log_metric(f"false_positive_rate_{stage}", business_metrics["false_positive_rate"])
             mlflow.log_metric(f"true_positive_rate_{stage}", business_metrics["true_positive_rate"])
@@ -264,34 +251,26 @@ class Model:
             mlflow.log_metric(f"avg_lost_loans_amount_{stage}", business_metrics["avg_lost_loans_amount"])
             mlflow.log_metric(f"avg_saved_loans_amnts_{stage}", business_metrics["avg_saved_loans_amnts"])
 
-            # Log confusion matrix values
             tn, fp, fn, tp = cm.ravel()
             mlflow.log_metric(f"true_negatives_{stage}", int(tn))
             mlflow.log_metric(f"false_positives_{stage}", int(fp))
             mlflow.log_metric(f"false_negatives_{stage}", int(fn))
             mlflow.log_metric(f"true_positives_{stage}", int(tp))
             
-            # Log classification report as artifact
             report_file = self.output_dir / f"{name.replace(' ', '_')}_{stage}_classification_report.txt"
             with open(report_file, 'w') as f:
                 f.write(report)
             mlflow.log_artifact(str(report_file))
             
-            # Log confusion matrix plot
             cm_plot_file = self.plots_dir / f"{name.replace(' ', '_')}_{stage}_confusion_matrix.png"
             if cm_plot_file.exists():
                 mlflow.log_artifact(str(cm_plot_file))
             
-            # Save model as artifact (except for DummyClassifier)
-            if name != "ZeroR Baseline":
-                try:
-                    mlflow.sklearn.log_model(model, f"{name.replace(' ', '_')}_model")
-                except:
-                    # Fallback for non-sklearn models
-                    model_file = self.output_dir / f"{name.replace(' ', '_')}_model.pkl"
-                    with open(model_file, 'wb') as f:
-                        pickle.dump(model, f)
-                    mlflow.log_artifact(str(model_file))
+            if name != "ZeroR Baseline" and stage == "test":
+                model_file = self.output_dir / f"{name.replace(' ', '_')}_model.pkl"
+                with open(model_file, 'wb') as f:
+                    pickle.dump(model, f)
+                mlflow.log_artifact(str(model_file))
 
         return {
             "name": name, "model": model, "stage": stage,
@@ -378,7 +357,8 @@ class Model:
         self.logger.info(f"Scores saved to {self.output_dir}/model_scores.csv")
  
     def run(self) -> list:
-        X_train_selected, X_test_selected = self._select_features(n_features=30)
+        X_train_selected, X_test_selected, selected_features = self._select_features(n_features=30)
+        self.logger.info(f"Selected top features: {', '.join(selected_features)}")
         models = {
             "ZeroR Baseline": DummyClassifier(strategy="most_frequent"),
             "Logistic Regression": LogisticRegression(
