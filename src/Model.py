@@ -13,6 +13,8 @@ from sklearn.feature_selection import SelectKBest, f_classif
 from sklearn.dummy import DummyClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import LinearSVC
+from sklearn.ensemble import AdaBoostClassifier, BaggingClassifier
+from sklearn.tree import DecisionTreeClassifier
 from xgboost import XGBClassifier
 from sklearn.model_selection import RandomizedSearchCV, StratifiedKFold
 from sklearn.metrics import (
@@ -172,12 +174,12 @@ class Model:
                 "solver": ["lbfgs", "liblinear"],
                 "max_iter": [200, 300, 500, 1000],
             },
-            # "AdaBoost": {
-            #     "n_estimators": [100, 200, 300, 400],
-            #     "learning_rate": [0.01, 0.05, 0.1, 0.3, 0.5, 1.0],
-            #     "estimator__max_depth": [1, 2, 3],
-            #     "estimator__min_samples_leaf": [1, 5, 10, 20],
-            # },
+            "AdaBoost": {
+                "n_estimators": [100, 200, 300, 400],
+                "learning_rate": [0.01, 0.05, 0.1, 0.3, 0.5, 1.0],
+                "estimator__max_depth": [1, 2, 3],
+                "estimator__min_samples_leaf": [1, 5, 10, 20],
+            },
             "LinearSVC": {
                 "C": [0.01, 0.1, 1.0, 10.0],
                 "tol": [1e-4, 1e-3, 1e-2],
@@ -197,13 +199,13 @@ class Model:
                     scale_pos_weight * 1.5,
                 ],
             },
-            # "Bagging": {
-            #     "n_estimators": [100, 200, 300],
-            #     "max_samples": [0.6, 0.8, 1.0],
-            #     "max_features": [0.6, 0.8, 1.0],
-            #     "bootstrap": [True],
-            #     "bootstrap_features": [False, True],
-            # }
+            "Bagging": {
+                "n_estimators": [100, 200, 300],
+                "max_samples": [0.6, 0.8, 1.0],
+                "max_features": [0.6, 0.8, 1.0],
+                "bootstrap": [True],
+                "bootstrap_features": [False, True],
+            }
         }
 
         if name not in param_distributions:
@@ -402,12 +404,12 @@ class Model:
                 class_weight="balanced",
                 random_state=39,
             ),
-            # "AdaBoost": AdaBoostClassifier(
-            #     estimator=DecisionTreeClassifier(
-            #         max_depth=2, min_samples_leaf=10, random_state=39, class_weight="balanced"
-            #     ),
-            #     n_estimators=300, learning_rate=0.5, random_state=39
-            # ),
+            "AdaBoost": AdaBoostClassifier(
+                estimator=DecisionTreeClassifier(
+                    max_depth=2, min_samples_leaf=10, random_state=39, class_weight="balanced"
+                ),
+                n_estimators=300, learning_rate=0.5, random_state=39
+            ),
             "XGBoost": XGBClassifier(
                 n_estimators=300,
                 max_depth=6,
@@ -417,15 +419,15 @@ class Model:
                 random_state=39,
                 eval_metric="logloss",
             ),
-            # "Bagging": BaggingClassifier(
-            #     estimator=DecisionTreeClassifier(random_state=39, class_weight="balanced"),
-            #     n_estimators=200,
-            #     max_samples=0.8,
-            #     max_features=0.8,
-            #     bootstrap=True,
-            #     random_state=39,
-            #     n_jobs=-1,
-            # ),
+            "Bagging": BaggingClassifier(
+                estimator=DecisionTreeClassifier(random_state=39, class_weight="balanced"),
+                n_estimators=200,
+                max_samples=0.8,
+                max_features=0.8,
+                bootstrap=True,
+                random_state=39,
+                n_jobs=-1,
+            ),
         }
 
         tuned_models = {}
