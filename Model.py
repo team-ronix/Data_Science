@@ -13,9 +13,7 @@ import mlflow.sklearn
 from sklearn.feature_selection import SelectKBest, f_classif
 from sklearn.dummy import DummyClassifier
 from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import AdaBoostClassifier, BaggingClassifier
 from sklearn.svm import LinearSVC
-from sklearn.tree import DecisionTreeClassifier
 from xgboost import XGBClassifier
 from sklearn.model_selection import RandomizedSearchCV, StratifiedKFold
 from sklearn.metrics import (
@@ -80,7 +78,7 @@ class Model:
                     try:
                         # Convert to string to ensure MLflow compatibility
                         params[key] = str(value)
-                    except:
+                    except Exception:
                         pass
         
         # Add custom CV best params if available (from hyperparameter tuning)
@@ -88,7 +86,7 @@ class Model:
             for key, value in model._cv_best_params.items():
                 try:
                     params[f"best_{key}"] = str(value)
-                except:
+                except Exception:
                     pass
         
         return params
@@ -323,7 +321,7 @@ class Model:
             if name != "ZeroR Baseline":
                 try:
                     mlflow.sklearn.log_model(model, f"{name.replace(' ', '_')}_model")
-                except:
+                except Exception:
                     # Fallback for non-sklearn models
                     model_file = self.output_dir / f"{name.replace(' ', '_')}_model.pkl"
                     with open(model_file, 'wb') as f:
