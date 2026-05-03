@@ -6,6 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 import pickle
+import joblib
 import mlflow
 import mlflow.sklearn
 
@@ -131,10 +132,46 @@ class Model:
 
     def _select_features(self, n_features: int = 30) -> pd.DataFrame:
         self.logger.info("Start selecting top features based on correlation with target.")
-        selector = SelectKBest(score_func=f_classif, k=n_features)
-        X_train_kbest = selector.fit_transform(self.X_train, self.y_train)
-        X_test_kbest = selector.transform(self.X_test)
+        self.selector = SelectKBest(score_func=f_classif, k=n_features)
+        X_train_kbest = self.selector.fit_transform(self.X_train, self.y_train)
+        X_test_kbest = self.selector.transform(self.X_test)
+        selected_mask = self.selector.get_support()
+        self.selected_feature_names = list(self.X_train.columns[selected_mask])
         return X_train_kbest, X_test_kbest
+
+    def _save_inference_bundle(self, tuned_models: dict, results: list) -> None:
+        test_results = [
+            r for r in results
+            if r["stage"] == "test" and r["name"] in tuned_models and r["name"] != "ZeroR Baseline"
+        ]
+        if not test_results:
+            self.logger.warning("No non-baseline test results found; skipping inference bundle save.")
+            return
+
+        best_result = max(test_results, key=lambda r: r["f2"])
+        best_name = best_result["name"]
+        best_model = tuned_models[best_name]
+
+        bundle = {
+            "model_name": best_name,
+            "model": best_model,
+            "selector": self.selector,
+            "feature_order": list(self.X_train.columns),
+            "selected_feature_names": self.selected_feature_names,
+            "feature_min": self.X_train.min().astype(float).to_dict(),
+            "feature_max": self.X_train.max().astype(float).to_dict(),
+        }
+
+        output_bundle_path = self.output_dir / "inference_bundle.pkl"
+        joblib.dump(bundle, output_bundle_path)
+
+        app_model_path = Path("models") / "model.pkl"
+        app_model_path.parent.mkdir(parents=True, exist_ok=True)
+        joblib.dump(bundle, app_model_path)
+
+        self.logger.info(
+            f"Inference bundle saved for API: {app_model_path} (best model: {best_name}, F2={best_result['f2']:.4f})"
+        )
 
     def _random_search_tune(self, name: str, model, X_train, y_train):
         scale_pos_weight = (y_train == 0).sum() / ((y_train == 1).sum() + 1e-6)
@@ -147,12 +184,12 @@ class Model:
                 "solver": ["lbfgs", "liblinear"],
                 "max_iter": [200, 300, 500, 1000],
             },
-            "AdaBoost": {
-                "n_estimators": [100, 200, 300, 400],
-                "learning_rate": [0.01, 0.05, 0.1, 0.3, 0.5, 1.0],
-                "estimator__max_depth": [1, 2, 3],
-                "estimator__min_samples_leaf": [1, 5, 10, 20],
-            },
+            # "AdaBoost": {
+            #     "n_estimators": [100, 200, 300, 400],
+            #     "learning_rate": [0.01, 0.05, 0.1, 0.3, 0.5, 1.0],
+            #     "estimator__max_depth": [1, 2, 3],
+            #     "estimator__min_samples_leaf": [1, 5, 10, 20],
+            # },
             "LinearSVC": {
                 "C": [0.01, 0.1, 1.0, 10.0],
                 "tol": [1e-4, 1e-3, 1e-2],
@@ -172,13 +209,13 @@ class Model:
                     scale_pos_weight * 1.5,
                 ],
             },
-            "Bagging": {
-                "n_estimators": [100, 200, 300],
-                "max_samples": [0.6, 0.8, 1.0],
-                "max_features": [0.6, 0.8, 1.0],
-                "bootstrap": [True],
-                "bootstrap_features": [False, True],
-            }
+            # "Bagging": {
+            #     "n_estimators": [100, 200, 300],
+            #     "max_samples": [0.6, 0.8, 1.0],
+            #     "max_features": [0.6, 0.8, 1.0],
+            #     "bootstrap": [True],
+            #     "bootstrap_features": [False, True],
+            # }
         }
 
         if name not in param_distributions:
@@ -192,8 +229,8 @@ class Model:
             param_distributions=param_distributions[name],
             n_iter=self.random_search_iter,
             scoring = make_scorer(fbeta_score, beta=2, pos_label=1),
-            cv=StratifiedKFold(n_splits=5, shuffle=True, random_state=42),
-            random_state=42,
+            cv=StratifiedKFold(n_splits=5, shuffle=True, random_state=39),
+            random_state=39,
             n_jobs=1,
             verbose=0,
         )
@@ -382,38 +419,38 @@ class Model:
         models = {
             "ZeroR Baseline": DummyClassifier(strategy="most_frequent"),
             "Logistic Regression": LogisticRegression(
-                max_iter=500, random_state=42, class_weight="balanced"
+                max_iter=500, random_state=39, class_weight="balanced"
             ),
             "LinearSVC": LinearSVC(
                 C=1.0,
                 max_iter=2000,
                 class_weight="balanced",
-                random_state=42,
+                random_state=39,
             ),
-            "AdaBoost": AdaBoostClassifier(
-                estimator=DecisionTreeClassifier(
-                    max_depth=2, min_samples_leaf=10, random_state=42, class_weight="balanced"
-                ),
-                n_estimators=300, learning_rate=0.5, random_state=42
-            ),
+            # "AdaBoost": AdaBoostClassifier(
+            #     estimator=DecisionTreeClassifier(
+            #         max_depth=2, min_samples_leaf=10, random_state=39, class_weight="balanced"
+            #     ),
+            #     n_estimators=300, learning_rate=0.5, random_state=39
+            # ),
             "XGBoost": XGBClassifier(
                 n_estimators=300,
                 max_depth=6,
                 learning_rate=0.05,
                 subsample=0.8,
                 colsample_bytree=0.8,
-                random_state=42,
+                random_state=39,
                 eval_metric="logloss",
             ),
-            "Bagging": BaggingClassifier(
-                estimator=DecisionTreeClassifier(random_state=42, class_weight="balanced"),
-                n_estimators=200,
-                max_samples=0.8,
-                max_features=0.8,
-                bootstrap=True,
-                random_state=42,
-                n_jobs=-1,
-            ),
+            # "Bagging": BaggingClassifier(
+            #     estimator=DecisionTreeClassifier(random_state=39, class_weight="balanced"),
+            #     n_estimators=200,
+            #     max_samples=0.8,
+            #     max_features=0.8,
+            #     bootstrap=True,
+            #     random_state=39,
+            #     n_jobs=-1,
+            # ),
         }
 
         tuned_models = {}
@@ -437,12 +474,13 @@ class Model:
         self._models_vs_baseline(results, stage="test")
 
         self._save_results_csv(results)
+        self._save_inference_bundle(tuned_models, results)
         return results
 
 
 if __name__ == "__main__":
     data_folder = Path("data")
-    train = pd.read_csv(data_folder / "train_norm.csv")
+    train = pd.read_csv(data_folder / "train_undersampled.csv")
     test = pd.read_csv(data_folder / "test.csv")
     business_statistics = pd.read_csv(data_folder / "business_statistics.csv")
     print(f"Train shape: {train.shape}, Test shape: {test.shape}")
@@ -453,6 +491,6 @@ if __name__ == "__main__":
         y_test=test["loan_status"],
         business_statistics=business_statistics,
         output_dir="model_outputs",
-        random_search_iter=10,
+        random_search_iter=5,
     )
     results = model_dev.run()
