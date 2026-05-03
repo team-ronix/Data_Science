@@ -25,9 +25,9 @@ def load_baseline_delta(stage: str) -> pd.DataFrame:
 
 @st.cache_data
 def load_train_data() -> pd.DataFrame:
-    available_columns = pd.read_csv(DATA_DIR / "train.csv", nrows=0).columns.tolist()
+    available_columns = pd.read_csv(DATA_DIR / "train_norm.csv", nrows=0).columns.tolist()
     use_columns = [column for column in EDA_COLUMNS if column in available_columns]
-    return pd.read_csv(DATA_DIR / "train.csv", usecols=use_columns)
+    return pd.read_csv(DATA_DIR / "train_norm.csv", usecols=use_columns)
 
 
 @st.cache_data

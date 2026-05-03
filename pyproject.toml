@@ -50,3 +50,5 @@ dev = [
 
 [tool.mypy]
 ignore_missing_imports = true
+explicit_package_bases = true
+exclude = ["^\\.venv"]

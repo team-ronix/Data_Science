@@ -1,5 +1,6 @@
 .env
 data/
+.venv/
 *.log
 *.pdf
 **/__pycache__/
