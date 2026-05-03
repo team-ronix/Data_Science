@@ -12,11 +12,23 @@ poetry install
 
 ## Run Pipelines
 
+Use the Makefile for the common workflows:
+
 ```bash
-poetry run python DataCollection.py
-poetry run python DataCleaning.py
-poetry run python DataValidation.py
-poetry run python EDA.py
+make preprocess
+make train
+make evaluate
+make test
+```
+
+If you want to run the scripts directly, use the `src/` paths:
+
+```bash
+poetry run python src/DataCollection.py
+poetry run python src/DataCleaning.py
+poetry run python src/DataValidation.py
+poetry run python src/DataTransformation.py
+poetry run python src/Model.py
 ```
 
 ## EDA Deliverables

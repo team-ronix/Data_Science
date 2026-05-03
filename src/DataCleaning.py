@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+import argparse
 import logging
 import pickle
 from pathlib import Path
@@ -8,7 +8,7 @@ from typing import Iterable
 import pandas as pd
 
 
-BASE_DIR = Path(__file__).resolve().parent
+BASE_DIR = Path(__file__).resolve().parent.parent
 RAW_PATH = BASE_DIR / "data/merged_df.csv"
 DEFAULT_OUTPUT_PATH = BASE_DIR / "data/merged_df_cleaned.csv"
 
@@ -354,4 +354,13 @@ def clean_merged_dataset(
 
 
 if __name__ == "__main__":
-    clean_merged_dataset()
+    parser = argparse.ArgumentParser(description="Clean merged dataset")
+    parser.add_argument("--input", default="data/merged_df.csv",
+                        help="Path to input merged dataset")
+    parser.add_argument("--output", default="data/merged_df_cleaned.csv",
+                        help="Path to save cleaned dataset")
+    args = parser.parse_args()
+
+    Path(args.output).parent.mkdir(parents=True, exist_ok=True)
+
+    clean_merged_dataset(input_path=Path(args.input), output_path=Path(args.output))

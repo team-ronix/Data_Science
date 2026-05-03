@@ -1,3 +1,4 @@
+import argparse
 import logging
 import os
 from typing import Any, Dict
@@ -337,6 +338,11 @@ class DataValidation:
 
 
 if __name__ == "__main__":
-    df = pd.read_csv("data/merged_df.csv")
+    parser = argparse.ArgumentParser(description="Validate merged dataset")
+    parser.add_argument("--input", default="data/merged_df.csv",
+                        help="Path to input dataset to validate")
+    args = parser.parse_args()
+
+    df = pd.read_csv(args.input)
     validator = DataValidation(df)
     validator.run_all_validations()

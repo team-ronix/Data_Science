@@ -1,3 +1,5 @@
+import argparse
+from pathlib import Path
 import requests
 import pandas as pd
 import functools
@@ -56,7 +58,7 @@ class DataCollectionPipeline:
             if missing_cols:
                 self.logger.warning(f"Missing columns in dataset: {missing_cols}")
             if "issue_d" in df.columns:
-                df["issue_d"] = pd.to_datetime(df["issue_d"], errors="coerce")
+                df["issue_d"] = pd.to_datetime(df["issue_d"], format="%b-%Y", errors="coerce")
             available_cols = [col for col in wanted_cols if col in df.columns]
             if not available_cols:
                 self.logger.error("None of the requested columns exist in the dataset.")
@@ -141,6 +143,19 @@ class DataCollectionPipeline:
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Collect loan and economic indicator data")
+    parser.add_argument("--loan-output", default="data/Lending Club loan.csv",
+                        help="Path to save loan dataset")
+    parser.add_argument("--indicators-output", default="data/indicators_df.csv",
+                        help="Path to save indicators dataset")
+    parser.add_argument("--merged-output", default="data/merged_df.csv",
+                        help="Path to save merged dataset")
+    args = parser.parse_args()
+
+    Path(args.loan_output).parent.mkdir(parents=True, exist_ok=True)
+    Path(args.indicators_output).parent.mkdir(parents=True, exist_ok=True)
+    Path(args.merged_output).parent.mkdir(parents=True, exist_ok=True)
+
     pipeline = DataCollectionPipeline()
 
     wanted_cols = [
@@ -152,7 +167,7 @@ if __name__ == "__main__":
         "pub_rec", "revol_bal", "revol_util", "total_acc", "total_pymnt",
         "recoveries", "last_pymnt_d", "avg_cur_bal", "acc_now_delinq",
     ]
-    loan_df = pipeline.collect_from_dataset(wanted_cols)
+    loan_df = pipeline.collect_from_dataset(wanted_cols, args.loan_output)
 
     target_url = "https://api.stlouisfed.org/fred/series/observations"
     start_date = loan_df["issue_d"].min().strftime("%Y-%m-%d")
@@ -176,7 +191,7 @@ if __name__ == "__main__":
         time.sleep(1)
 
     merged_indicators_df = pipeline.merge_indicators(indicators_dfs) 
-    merged_indicators_df.to_csv("data/indicators_df.csv", index=False)
+    merged_indicators_df.to_csv(args.indicators_output, index=False)
 
     merged_df = pipeline.merge_indicators_with_loans(loan_df, merged_indicators_df)
-    merged_df.to_csv("data/merged_df.csv", index=False)
+    merged_df.to_csv(args.merged_output, index=False)

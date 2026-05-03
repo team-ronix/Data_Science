@@ -1,3 +1,4 @@
+import argparse
 import os
 import logging
 import pandas as pd
@@ -455,10 +456,22 @@ class Model:
 
 
 if __name__ == "__main__":
-    data_folder = Path("data")
-    train = pd.read_csv(data_folder / "train_undersampled.csv")
-    test = pd.read_csv(data_folder / "test.csv")
-    business_statistics = pd.read_csv(data_folder / "business_statistics.csv")
+    parser = argparse.ArgumentParser(description="Train and evaluate loan models")
+    parser.add_argument("--train-data", default="data/train_undersampled.csv",
+                        help="Path to normalized train dataset")
+    parser.add_argument("--test-data", default="data/test.csv",
+                        help="Path to test dataset")
+    parser.add_argument("--business-stats", default="data/business_statistics.csv",
+                        help="Path to business statistics")
+    parser.add_argument("--output-dir", default="model_outputs",
+                        help="Directory to save model outputs")
+    parser.add_argument("--random-search-iter", type=int, default=10,
+                        help="Number of random search iterations for hyperparameter tuning")
+    args = parser.parse_args()
+
+    train = pd.read_csv(args.train_data)
+    test = pd.read_csv(args.test_data)
+    business_statistics = pd.read_csv(args.business_stats)
     print(f"Train shape: {train.shape}, Test shape: {test.shape}")
     model_dev = Model(
         X_train=train.drop(columns=["loan_status"]),
@@ -466,7 +479,7 @@ if __name__ == "__main__":
         X_test=test.drop(columns=["loan_status"]),
         y_test=test["loan_status"],
         business_statistics=business_statistics,
-        output_dir="model_outputs",
-        random_search_iter=5,
+        output_dir=args.output_dir,
+        random_search_iter=args.random_search_iter,
     )
     results = model_dev.run()

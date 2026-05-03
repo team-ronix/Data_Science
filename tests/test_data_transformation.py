@@ -292,9 +292,8 @@ def test_save_business_statistics_creates_csv_with_correct_columns(tmp_path, mon
         }
     )
 
-    save_business_statistics(make_logger(), data)
-
     csv_path = tmp_path / "data" / "business_statistics.csv"
+    save_business_statistics(make_logger(), data, csv_path)
     assert csv_path.exists()
     stats_df = pd.read_csv(csv_path)
     assert set(stats_df.columns) == {"avg_loan_profit", "avg_loan_loss", "avg_loan_amount"}
@@ -311,9 +310,9 @@ def test_save_business_statistics_calculates_correct_values(tmp_path, monkeypatc
             "loan_amnt": [1000.0, 1000.0, 1000.0, 1000.0],
         }
     )
-
-    save_business_statistics(make_logger(), data)
-    stats_df = pd.read_csv(tmp_path / "data" / "business_statistics.csv")
+    saved_path = tmp_path / "data" / "business_statistics.csv"
+    save_business_statistics(make_logger(), data, saved_path)
+    stats_df = pd.read_csv(saved_path)
     # avg_loan_profit = mean(1200,1400) - mean(1000,1000) = 300
     assert pytest.approx(stats_df["avg_loan_profit"].iloc[0], rel=0.01) == 300.0
     # avg_loan_loss = mean(1000,1000) - mean(100,200) = 850
@@ -355,13 +354,20 @@ def test_split_transformed_data_stratification_maintains_class_ratio():
 
 
 def test_save_transformation_outputs_writes_all_csv_files(tmp_path, monkeypatch):
-    monkeypatch.setattr(dt_module, "OUTPUT_PATH", tmp_path / "transformed.csv")
-    monkeypatch.setattr(dt_module, "TRAIN_OUTPUT_PATH", tmp_path / "train.csv")
-    monkeypatch.setattr(dt_module, "TRAIN_NORM_OUTPUT_PATH", tmp_path / "train_norm.csv")
-    monkeypatch.setattr(dt_module, "TEST_OUTPUT_PATH", tmp_path / "test.csv")
+    output_path = tmp_path / "transformed.csv"
+    train_output_path = tmp_path / "train.csv"
+    train_norm_output_path = tmp_path / "train_norm.csv"
+    test_output_path = tmp_path / "test.csv"
 
     df = _make_transformed_df()
-    train_norm, test_norm = save_transformation_outputs(make_logger(), df)
+    train_norm, test_norm = save_transformation_outputs(
+        make_logger(), 
+        df,
+        output_path=output_path,
+        train_output_path=train_output_path,
+        train_norm_output_path=train_norm_output_path,
+        test_output_path=test_output_path,
+    )
 
     assert (tmp_path / "transformed.csv").exists()
     assert (tmp_path / "train.csv").exists()
@@ -372,13 +378,20 @@ def test_save_transformation_outputs_writes_all_csv_files(tmp_path, monkeypatch)
 
 
 def test_save_transformation_outputs_returns_normalized_splits(tmp_path, monkeypatch):
-    monkeypatch.setattr(dt_module, "OUTPUT_PATH", tmp_path / "transformed.csv")
-    monkeypatch.setattr(dt_module, "TRAIN_OUTPUT_PATH", tmp_path / "train.csv")
-    monkeypatch.setattr(dt_module, "TRAIN_NORM_OUTPUT_PATH", tmp_path / "train_norm.csv")
-    monkeypatch.setattr(dt_module, "TEST_OUTPUT_PATH", tmp_path / "test.csv")
+    output_path = tmp_path / "transformed.csv"
+    train_output_path = tmp_path / "train.csv"
+    train_norm_output_path = tmp_path / "train_norm.csv"
+    test_output_path = tmp_path / "test.csv"
 
     df = _make_transformed_df()
-    train_norm, test_norm = save_transformation_outputs(make_logger(), df)
+    train_norm, test_norm = save_transformation_outputs(
+        make_logger(), 
+        df, 
+        output_path=output_path, 
+        train_output_path=train_output_path, 
+        train_norm_output_path=train_norm_output_path, 
+        test_output_path=test_output_path
+    )
 
     assert len(train_norm) + len(test_norm) == len(df)
     # loan_amnt was constant (1000), zero-range → normalized to 0
