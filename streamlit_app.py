@@ -2,6 +2,8 @@ from pathlib import Path
 
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import streamlit as st
 
 
@@ -9,6 +11,7 @@ ROOT = Path(__file__).parent
 DATA_DIR = ROOT / "data"
 OUTPUT_DIR = ROOT / "model_outputs"
 PLOTS_DIR = OUTPUT_DIR / "plots"
+FIGURES_DIR = ROOT / "reports" / "figures"
 EDA_COLUMNS = ["loan_status", "loan_amnt", "annual_inc", "int_rate", "dti"]
 EDA_SAMPLE_SIZE = 5000
 
@@ -28,6 +31,37 @@ def load_train_data() -> pd.DataFrame:
     available_columns = pd.read_csv(DATA_DIR / "train_norm.csv", nrows=0).columns.tolist()
     use_columns = [column for column in EDA_COLUMNS if column in available_columns]
     return pd.read_csv(DATA_DIR / "train_norm.csv", usecols=use_columns)
+
+
+_DEFAULT_STATUSES = {
+    "charged off", "default",
+    "late (31-120 days)", "late (16-30 days)",
+    "does not meet the credit policy. status:charged off",
+}
+_NON_DEFAULT_STATUSES = {
+    "fully paid",
+    "does not meet the credit policy. status:fully paid",
+}
+_EDA_RAW_COLS = ["loan_status", "int_rate", "sub_grade", "term", "issue_d", "loan_amnt", "emp_length", "purpose"]
+
+
+@st.cache_data
+def load_raw_eda() -> pd.DataFrame:
+    path = DATA_DIR / "merged_df_cleaned.csv"
+    available = pd.read_csv(path, nrows=0).columns.tolist()
+    cols = [c for c in _EDA_RAW_COLS if c in available]
+    df = pd.read_csv(path, usecols=cols)
+    if "loan_status" in df.columns:
+        status = df["loan_status"].astype(str).str.strip().str.lower()
+        df = df[status != "current"].copy()
+        status = df["loan_status"].astype(str).str.strip().str.lower()
+        df["target_default"] = None
+        df.loc[status.isin(_DEFAULT_STATUSES), "target_default"] = 1
+        df.loc[status.isin(_NON_DEFAULT_STATUSES), "target_default"] = 0
+        df["target_default"] = pd.to_numeric(df["target_default"], errors="coerce")
+        df = df.dropna(subset=["target_default"])
+        df["target_default"] = df["target_default"].astype(int)
+    return df
 
 
 @st.cache_data
@@ -60,6 +94,209 @@ def show_overview(scores: pd.DataFrame) -> None:
     st.write(
         "The model helps estimate if a loan is more likely to be fully paid or charged off. The goal is to support better lending decisions."
     )
+
+
+def show_home(scores: pd.DataFrame) -> None:
+    test_scores = scores[scores["Stage"] == "test"].copy()
+    best_row = test_scores.sort_values("F2-Score", ascending=False).iloc[0]
+
+    st.header("Project Overview")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Best Model", str(best_row["Model"]))
+    c2.metric("F2 Score", format_metric(float(best_row["F2-Score"])))
+    c3.metric("ROC-AUC", format_metric(float(best_row["ROC-AUC"])))
+
+    st.markdown(
+        "The goal is to predict whether a loan will be **Fully Paid** or **Charged Off**. "
+        "Below are the five most important patterns found in the data."
+    )
+
+    df = load_raw_eda()
+
+    # 1. Class imbalance
+    st.subheader("1. Class Imbalance")
+    if "target_default" in df.columns:
+        n0 = int((df["target_default"] == 0).sum())
+        n1 = int((df["target_default"] == 1).sum())
+        fig_imb = make_subplots(rows=1, cols=2, specs=[[{"type": "bar"}, {"type": "pie"}]])
+        fig_imb.add_trace(go.Bar(
+            x=["Fully Paid", "Charge Off"], y=[n0, n1],
+            marker_color=["#4C72B0", "#DD8452"],
+            text=[f"{v:,}<br>({100*v/(n0+n1):.1f}%)" for v in [n0, n1]],
+            textposition="outside", name=""
+        ), row=1, col=1)
+        fig_imb.add_trace(go.Pie(
+            labels=["Fully Paid", "Charge Off"], values=[n0, n1],
+            marker_colors=["#4C72B0", "#DD8452"], hole=0.3, name=""
+        ), row=1, col=2)
+        fig_imb.update_layout(title="Class Imbalance", showlegend=False, height=380)
+        st.plotly_chart(fig_imb, use_container_width=True)
+
+    # 2. Charge-Off Rate by sub-grade
+    st.subheader("2. Charge-Off Rate by Loan Sub-Grade")
+    if "sub_grade" in df.columns and "target_default" in df.columns:
+        grade_stats = (
+            df.groupby("sub_grade")["target_default"]
+            .agg(["mean", "count"])
+            .rename(columns={"mean": "default_rate", "count": "n_loans"})
+            .reset_index()
+            .sort_values("sub_grade")
+        )
+        grade_stats["default_pct"] = (grade_stats["default_rate"] * 100).round(1)
+        fig_grade = make_subplots(rows=1, cols=2, subplot_titles=("Charge-Off Rate (%)", "Loan Volume"))
+        fig_grade.add_trace(go.Bar(
+            x=grade_stats["sub_grade"], y=grade_stats["default_pct"],
+            marker_color="#E74C3C", name="Charge-Off Rate",
+            hovertemplate="%{x}: %{y:.1f}%"
+        ), row=1, col=1)
+        fig_grade.add_trace(go.Bar(
+            x=grade_stats["sub_grade"], y=grade_stats["n_loans"],
+            marker_color="#3498DB", name="Loan Count",
+            hovertemplate="%{x}: %{y:,}"
+        ), row=1, col=2)
+        fig_grade.update_layout(showlegend=False, height=380)
+        st.plotly_chart(fig_grade, use_container_width=True)
+
+    # 3. Interest rate by default status
+    st.subheader("3. Interest Rate vs Default Status")
+    if "int_rate" in df.columns and "target_default" in df.columns:
+        int_df = df[["int_rate", "target_default"]].dropna().copy()
+        if int_df["int_rate"].dtype == object:
+            int_df["int_rate"] = int_df["int_rate"].str.replace("%", "").astype(float)
+        int_df["Status"] = int_df["target_default"].map({0: "Fully Paid", 1: "Charge Off"})
+        fig_rate = px.box(
+            int_df, x="Status", y="int_rate",
+            color="Status", color_discrete_map={"Fully Paid": "#4C72B0", "Charge Off": "#DD8452"},
+            labels={"int_rate": "Interest Rate (%)"},
+            title="Interest Rate Distribution by Outcome",
+            points=False,
+        )
+        fig_rate.update_layout(showlegend=False, height=380)
+        st.plotly_chart(fig_rate, use_container_width=True)
+
+    # 4. Charge-Off Rate by term
+    st.subheader("4. Loan Term Effect")
+    if "term" in df.columns and "target_default" in df.columns:
+        term_stats = (
+            df.groupby("term")["target_default"]
+            .agg(["mean", "count"])
+            .rename(columns={"mean": "default_rate", "count": "n"})
+            .reset_index()
+        )
+        term_stats["default_pct"] = (term_stats["default_rate"] * 100).round(1)
+        term_stats["term_label"] = term_stats["term"].astype(str).str.strip()
+        fig_term = make_subplots(
+            rows=1, cols=2, subplot_titles=("Charge-Off Rate (%)", "Loan Count"),
+            specs=[[{"type": "bar"}, {"type": "bar"}]]
+        )
+        fig_term.add_trace(go.Bar(
+            x=term_stats["term_label"], y=term_stats["default_pct"],
+            marker_color="#E74C3C", text=term_stats["default_pct"].map(lambda v: f"{v:.1f}%"),
+            textposition="outside", name="Charge-Off Rate"
+        ), row=1, col=1)
+        fig_term.add_trace(go.Bar(
+            x=term_stats["term_label"], y=term_stats["n"],
+            marker_color="#3498DB", name="Count"
+        ), row=1, col=2)
+        fig_term.update_layout(showlegend=False, height=380)
+        st.plotly_chart(fig_term, use_container_width=True)
+
+    # 5. Employment length
+    st.subheader("5. Employment Length")
+    if "emp_length" in df.columns and "target_default" in df.columns:
+        emp_df = df[["emp_length", "target_default"]].dropna(subset=["emp_length"]).copy()
+        import re
+        emp_df["emp_yrs"] = emp_df["emp_length"].astype(str).apply(
+            lambda x: 0 if "< 1" in x else (10 if "10+" in x else int(re.sub(r"\D", "", x) or -1))
+        )
+        emp_df = emp_df[emp_df["emp_yrs"] >= 0]
+        emp_stats = (
+            emp_df.groupby("emp_yrs")["target_default"]
+            .agg(["mean", "count"])
+            .rename(columns={"mean": "charge_off_rate", "count": "n"})
+            .reset_index().sort_values("emp_yrs")
+        )
+        emp_stats["charge_off_pct"] = (emp_stats["charge_off_rate"] * 100).round(2)
+        emp_stats["label"] = emp_stats["emp_yrs"].apply(lambda x: "< 1 yr" if x == 0 else ("10+ yrs" if x == 10 else f"{x} yrs"))
+        fig_emp = make_subplots(
+            rows=1, cols=2,
+            subplot_titles=("Loan Volume by Employment Length", "Charge-Off Rate by Employment Length"),
+            specs=[[{"type": "bar"}, {"type": "scatter"}]],
+        )
+        fig_emp.add_trace(go.Bar(
+            x=emp_stats["label"], y=emp_stats["n"],
+            marker_color="#5DADE2", name="Loan Count",
+            hovertemplate="%{x}: %{y:,} loans"
+        ), row=1, col=1)
+        fig_emp.add_trace(go.Scatter(
+            x=emp_stats["label"], y=emp_stats["charge_off_pct"],
+            mode="lines+markers", line_color="#E74C3C", name="Charge-Off Rate",
+            hovertemplate="%{x}: %{y:.2f}%"
+        ), row=1, col=2)
+        fig_emp.update_yaxes(title_text="Count", row=1, col=1)
+        fig_emp.update_yaxes(title_text="Charge-Off Rate (%)", row=1, col=2)
+        fig_emp.update_layout(showlegend=False, height=400)
+        st.plotly_chart(fig_emp, use_container_width=True)
+
+    # 6. Loan purpose
+    st.subheader("6. Loan Purpose")
+    if "purpose" in df.columns and "target_default" in df.columns:
+        purpose_stats = (
+            df.dropna(subset=["purpose"]).groupby("purpose")["target_default"]
+            .agg(["mean", "count"])
+            .rename(columns={"mean": "charge_off_rate", "count": "n"})
+            .reset_index()
+        )
+        purpose_stats["charge_off_pct"] = (purpose_stats["charge_off_rate"] * 100).round(1)
+        by_rate = purpose_stats.sort_values("charge_off_pct")
+        by_vol  = purpose_stats.sort_values("n")
+        fig_purp = make_subplots(
+            rows=1, cols=2,
+            subplot_titles=("Charge-Off Rate by Purpose", "Loan Volume by Purpose"),
+        )
+        fig_purp.add_trace(go.Bar(
+            x=by_rate["charge_off_pct"], y=by_rate["purpose"],
+            orientation="h", marker_color="#E74C3C", name="Charge-Off Rate",
+            hovertemplate="%{y}: %{x:.1f}%"
+        ), row=1, col=1)
+        fig_purp.add_trace(go.Bar(
+            x=by_vol["n"], y=by_vol["purpose"],
+            orientation="h", marker_color="#3498DB", name="Loan Count",
+            hovertemplate="%{y}: %{x:,}"
+        ), row=1, col=2)
+        fig_purp.update_xaxes(title_text="Charge-Off Rate (%)", row=1, col=1)
+        fig_purp.update_xaxes(title_text="Loans", row=1, col=2)
+        fig_purp.update_layout(showlegend=False, height=460)
+        st.plotly_chart(fig_purp, use_container_width=True)
+
+    # 7. Temporal trends
+    st.subheader("7. Temporal Trends")
+    if "issue_d" in df.columns and "target_default" in df.columns and "loan_amnt" in df.columns:
+        tmp = df[["issue_d", "target_default", "loan_amnt"]].copy()
+        tmp["issue_d"] = pd.to_datetime(tmp["issue_d"], errors="coerce")
+        tmp = tmp.dropna(subset=["issue_d"])
+        tmp["ym"] = tmp["issue_d"].dt.to_period("M").astype(str)
+        monthly = (
+            tmp.groupby("ym")
+            .agg(n_loans=("loan_amnt", "count"),
+                 default_rate=("target_default", "mean"),
+                 avg_loan=("loan_amnt", "mean"))
+            .reset_index()
+        )
+        monthly["default_pct"] = (monthly["default_rate"] * 100).round(2)
+        fig_time = make_subplots(
+            rows=3, cols=1, shared_xaxes=True,
+            subplot_titles=("Monthly Loan Originations", "Monthly Charge-Off Rate (%)", "Avg Loan Amount ($)"),
+            vertical_spacing=0.08,
+        )
+        fig_time.add_trace(go.Scatter(x=monthly["ym"], y=monthly["n_loans"],
+            mode="lines", line_color="#3498DB", name="Originations"), row=1, col=1)
+        fig_time.add_trace(go.Scatter(x=monthly["ym"], y=monthly["default_pct"],
+            mode="lines", line_color="#E74C3C", name="Charge-Off Rate"), row=2, col=1)
+        fig_time.add_trace(go.Scatter(x=monthly["ym"], y=monthly["avg_loan"],
+            mode="lines", line_color="#27AE60", name="Avg Loan"), row=3, col=1)
+        fig_time.update_layout(showlegend=False, height=560)
+        st.plotly_chart(fig_time, use_container_width=True)
 
 
 def show_eda(train: pd.DataFrame) -> None:
@@ -155,9 +392,11 @@ def main() -> None:
     scores = load_scores()
     train = load_train_data()
 
-    show_overview(scores)
-    tab1, tab2, tab3 = st.tabs(["EDA", "Model Results", "Business Insights"])
+    st.title("Loan Risk Dashboard") 
+    tab0, tab1, tab2, tab3 = st.tabs(["Home", "EDA", "Model Results", "Business Insights"])
 
+    with tab0:
+        show_home(scores)
     with tab1:
         show_eda(train)
     with tab2:
