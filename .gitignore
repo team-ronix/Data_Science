@@ -8,10 +8,13 @@ data/
 *.docx
 *.html
 *.ipynb
+src/__pycache__/*
+tests/__pycache__/*
 eda_outputs/
 model_outputs/
 mlruns/
 mlflow.db
-
+.coverage
+htmlcov/
 # Never ignore the env template
 !.env.example

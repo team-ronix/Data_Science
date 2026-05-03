@@ -3,7 +3,7 @@ from datetime import datetime
 import pandas as pd
 import pytest
 
-from DataCollection import DataCollectionPipeline
+from src.DataCollection import DataCollectionPipeline
 
 
 class DummyResponse:
@@ -186,3 +186,95 @@ def test_merge_indicators_with_loans_returns_loan_df_when_indicators_empty(pipel
     result = pipeline.merge_indicators_with_loans(loan_df, indicators_df)
 
     assert result.equals(loan_df)
+
+
+def test_collect_from_api_returns_empty_dataframe_when_no_records(pipeline, monkeypatch):
+    monkeypatch.setattr(pipeline, "_collect_api_query", lambda url, params: [])
+    monkeypatch.setenv("API_KEY", "key")
+
+    result = pipeline.collect_from_api("https://example.com/api", {"series_id": "UNRATE"})
+
+    assert isinstance(result, pd.DataFrame)
+    assert result.empty
+
+
+def test_collect_api_query_falls_back_to_series_id_as_column_name(pipeline):
+    response = DummyResponse(
+        {"observations": [{"date": "2021-06-01", "value": "3.2"}]}
+    )
+    pipeline.session = DummySession(response)
+
+    records = pipeline._collect_api_query(
+        "https://example.com/api",
+        {"series_id": "FEDFUNDS"},  # no column_name
+    )
+
+    assert records == [{"Year": 2021, "Month": 6, "FEDFUNDS": "3.2"}]
+
+
+def test_collect_api_query_skips_all_null_dates(pipeline):
+    response = DummyResponse(
+        {"observations": [{"date": None, "value": "1.0"}, {"date": None, "value": "2.0"}]}
+    )
+    pipeline.session = DummySession(response)
+
+    records = pipeline._collect_api_query("https://example.com/api", {"series_id": "X"})
+
+    assert records == []
+
+
+def test_collect_api_query_handles_missing_observations_key(pipeline):
+    response = DummyResponse({"data": []})  # no 'observations' key
+    pipeline.session = DummySession(response)
+
+    records = pipeline._collect_api_query("https://example.com/api", {"series_id": "X"})
+
+    assert records == []
+
+
+def test_collect_from_dataset_no_date_parse_when_issue_d_not_wanted(pipeline, tmp_path):
+    csv_path = tmp_path / "dataset.csv"
+    pd.DataFrame({"id": [1, 2], "issue_d": ["bad-date", "also-bad"], "loan_amnt": [100, 200]}).to_csv(
+        csv_path, index=False
+    )
+
+    result = pipeline.collect_from_dataset(["id", "loan_amnt"], str(csv_path))
+
+    # issue_d is not in the result at all — no parsing, no error
+    assert "issue_d" not in result.columns
+    assert list(result.columns) == ["id", "loan_amnt"]
+
+
+def test_collect_from_dataset_returns_available_subset_when_some_columns_missing(pipeline, tmp_path):
+    csv_path = tmp_path / "dataset.csv"
+    pd.DataFrame({"id": [1, 2], "loan_amnt": [100, 200]}).to_csv(csv_path, index=False)
+
+    result = pipeline.collect_from_dataset(["id", "loan_amnt", "nonexistent"], str(csv_path))
+
+    assert list(result.columns) == ["id", "loan_amnt"]
+    assert len(result) == 2
+
+
+def test_merge_indicators_single_frame_returned_unchanged(pipeline):
+    df = pd.DataFrame({"Year": [2020, 2021], "Month": [1, 2], "CPI": [1.0, 1.2]})
+
+    result = pipeline.merge_indicators([df])
+
+    pd.testing.assert_frame_equal(result.reset_index(drop=True), df.reset_index(drop=True))
+
+
+
+def test_merge_indicators_with_loans_unmatched_date_produces_nan(pipeline):
+    loan_df = pd.DataFrame(
+        {
+            "id": [1],
+            "issue_d": pd.to_datetime(["2023-06-15"]),  # no matching indicator row
+            "loan_amnt": [500],
+        }
+    )
+    indicators_df = pd.DataFrame({"Year": [2020], "Month": [1], "CPI": [1.5]})
+
+    result = pipeline.merge_indicators_with_loans(loan_df, indicators_df)
+
+    assert pd.isna(result.loc[0, "CPI"])
+    assert result.loc[0, "loan_amnt"] == 500
