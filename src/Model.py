@@ -73,14 +73,14 @@ class Model:
                 if not key.startswith('estimator__'):
                     try:
                         params[key] = str(value)
-                    except:
+                    except Exception:
                         pass
         
         if hasattr(model, '_cv_best_params'):
             for key, value in model._cv_best_params.items():
                 try:
                     params[f"best_{key}"] = str(value)
-                except:
+                except Exception:
                     pass
         
         return params
