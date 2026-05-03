@@ -144,14 +144,14 @@ if __name__ == "__main__":
     pipeline = DataCollectionPipeline()
 
     wanted_cols = [
-        "id", "loan_amnt", "funded_amnt", "funded_amnt_inv", "term", "int_rate",
+        "loan_amnt", "funded_amnt", "funded_amnt_inv", "term", "int_rate",
         "installment", "sub_grade", "emp_title", "emp_length", "home_ownership",
         "annual_inc", "verification_status", "issue_d", "loan_status", "pymnt_plan",
         "purpose", "dti", "delinq_2yrs", "earliest_cr_line", "fico_range_low",
         "fico_range_high", "inq_last_6mths", "mths_since_last_delinq", "open_acc",
         "pub_rec", "revol_bal", "revol_util", "total_acc", "total_pymnt",
-        "recoveries", "last_pymnt_d", "avg_cur_bal", "acc_now_delinq",
-    ]
+        "recoveries", "last_pymnt_d", "avg_cur_bal", "acc_now_delinq","mort_acc","pub_rec_bankruptcies","initial_list_status",
+        ]
     loan_df = pipeline.collect_from_dataset(wanted_cols)
 
     target_url = "https://api.stlouisfed.org/fred/series/observations"

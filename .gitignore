@@ -16,5 +16,4 @@ mlruns/
 mlflow.db
 .coverage
 htmlcov/
-# Never ignore the env template
 !.env.example

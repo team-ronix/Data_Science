@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Iterable
 
 import pandas as pd
-
+import os
 
 BASE_DIR = Path(__file__).resolve().parent
 RAW_PATH = BASE_DIR / "data/merged_df.csv"
@@ -17,11 +17,13 @@ DATE_COLUMNS = ["issue_d", "earliest_cr_line", "last_pymnt_d"]
 STRING_COLUMNS = [
     "term", "sub_grade", "emp_title", "emp_length", "home_ownership",
     "verification_status", "loan_status", "pymnt_plan", "purpose",
+    "initial_list_status",
 ]
 
 COUNT_COLUMNS = [
     "delinq_2yrs", "inq_last_6mths", "mths_since_last_delinq",
     "open_acc", "pub_rec", "total_acc", "acc_now_delinq",
+    "mort_acc", "pub_rec_bankruptcies",
 ]
 
 POSITIVE_AMOUNT_COLUMNS = [
@@ -36,7 +38,7 @@ INDICATOR_COLUMNS = ["CPI", "Unemployment Rate", "Federal Funds Rate"]
 _NON_NEGATIVE_COLUMNS = POSITIVE_AMOUNT_COLUMNS + RATE_COLUMNS + COUNT_COLUMNS
 
 _NUMERIC_CANDIDATES = {
-    "id", "fico_range_low", "fico_range_high",
+    "fico_range_low", "fico_range_high",
     *COUNT_COLUMNS, *POSITIVE_AMOUNT_COLUMNS, *RATE_COLUMNS, *INDICATOR_COLUMNS,
 }
 
@@ -52,6 +54,7 @@ class DataCleaningPipeline:
         self.logger.info(f"Pipeline '{self.name}' initialized.")
 
     def _setup_logging(self) -> None:
+        os.makedirs("logs", exist_ok=True)
         logging.basicConfig(
             level=logging.INFO,
             format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
