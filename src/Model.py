@@ -12,9 +12,7 @@ import mlflow
 from sklearn.feature_selection import SelectKBest, f_classif
 from sklearn.dummy import DummyClassifier
 from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import AdaBoostClassifier, BaggingClassifier
 from sklearn.svm import LinearSVC
-from sklearn.tree import DecisionTreeClassifier
 from xgboost import XGBClassifier
 from sklearn.model_selection import RandomizedSearchCV, StratifiedKFold
 from sklearn.metrics import (
@@ -75,14 +73,14 @@ class Model:
                 if not key.startswith('estimator__'):
                     try:
                         params[key] = str(value)
-                    except:
+                    except Exception:
                         pass
         
         if hasattr(model, '_cv_best_params'):
             for key, value in model._cv_best_params.items():
                 try:
                     params[f"best_{key}"] = str(value)
-                except:
+                except Exception:
                     pass
         
         return params
