@@ -3,6 +3,9 @@ substitutions:
   _REPO_NAME: loan-prediction
   _SERVICE_NAME: loan-prediction-api
 
+options:
+  logging: CLOUD_LOGGING_ONLY
+
 steps:
   - name: "python:3.12-slim"
     id: "run-tests"
