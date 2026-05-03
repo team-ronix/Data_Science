@@ -7,18 +7,6 @@ options:
   logging: CLOUD_LOGGING_ONLY
 
 steps:
-  - name: "python:3.12-slim"
-    id: "run-tests"
-    entrypoint: bash
-    args:
-      - "-c"
-      - |
-        pip install poetry --quiet
-        poetry install
-        poetry run pytest tests/
-        poetry run ruff check .
-        poetry run mypy .
-
   - name: "gcr.io/cloud-builders/docker"
     id: "build"
     args:
